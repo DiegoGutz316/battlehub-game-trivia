@@ -14,6 +14,8 @@ Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://git
 ## Estructura
 
 ```text
+BattleHub.Trivia.slnx                → solución .NET (agrupa los 5 proyectos)
+docs/                                → documentación del equipo (reglas del juego, contratos internos)
 .github/workflows/                   → pipeline de CI (build + pruebas unitarias + pruebas de integración)
 src/
   BattleHub.Trivia.Api/              → backend .NET 10 (punto de entrada)
@@ -39,4 +41,29 @@ tests/
 
 ## Cómo correr localmente
 
-Pendiente: se completará cuando se creen los proyectos de la API y del microfrontend.
+### Backend (.NET 10)
+
+Requisito: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
+
+Desde la raíz del repositorio (donde está `BattleHub.Trivia.slnx`):
+
+```bash
+dotnet restore
+dotnet build
+dotnet run --project src/BattleHub.Trivia.Api
+```
+
+La API queda en `http://localhost:5185`. Para verificar que está arriba: `GET http://localhost:5185/health` → `Healthy`.
+
+Pruebas (los mismos comandos que corre el CI):
+
+```bash
+dotnet test --filter Category=Unit          # pruebas unitarias
+dotnet test --filter Category=Integration   # pruebas de integración
+```
+
+Cada clase de prueba debe marcarse con `[Trait("Category", "Unit")]` o `[Trait("Category", "Integration")]` para que el CI la ejecute.
+
+### Frontend (Aurelia)
+
+Pendiente: se completará cuando se cree el proyecto del microfrontend.
