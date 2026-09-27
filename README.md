@@ -31,14 +31,15 @@ src/
   BattleHub.Trivia.Data/             → persistencia (depende de Domain)
     Context/                         → contexto/conexión de la base de datos
     Repositories/                    → implementaciones de las interfaces de Domain
-  trivia-frontend/                   → microfrontend Aurelia
+  trivia-frontend/                   → microfrontend Aurelia 2 (webpack + TypeScript)
+    src/trivia-app.*                 → componente raíz del microfrontend
     src/contracts/                   → GameModule y GameContext (contrato de battlehub-contracts)
     src/components/                  → vistas del juego (pregunta, opciones, marcador)
     src/services/                    → conexión al hub y cliente de la API
 tests/
   BattleHub.Trivia.UnitTests/        → pruebas unitarias del backend (Category=Unit)
   BattleHub.Trivia.IntegrationTests/ → pruebas de integración API + base de datos (Category=Integration)
-  trivia-frontend/                   → pruebas unitarias del microfrontend
+  trivia-frontend/                   → pruebas unitarias del microfrontend (Jest, archivos *.spec.ts)
 ```
 
 ## Cómo correr localmente
@@ -68,4 +69,26 @@ Cada clase de prueba debe marcarse con `[Trait("Category", "Unit")]` o `[Trait("
 
 ### Frontend (Aurelia)
 
-Pendiente: se completará cuando se cree el proyecto del microfrontend.
+Requisito: [Node.js 24](https://nodejs.org/).
+
+Todos los comandos se corren desde `src/trivia-frontend`:
+
+```bash
+cd src/trivia-frontend
+npm ci           # instalar dependencias (usa package-lock.json)
+npm start        # servidor de desarrollo en http://localhost:9000
+```
+
+Los mismos comandos que corre el CI:
+
+```bash
+npm run lint     # ESLint (código y pruebas) + Stylelint
+npm run build    # build de producción en dist/
+npm test         # pruebas unitarias con Jest
+```
+
+Las pruebas viven en `tests/trivia-frontend/` (fuera del proyecto, como pide la estructura mínima del proyecto). Para que funcionen desde ahí:
+
+- Jest busca las pruebas en esa carpeta y resuelve los paquetes desde `src/trivia-frontend/node_modules` (configuración `jest` en `package.json`).
+- `npm run lint` ejecuta ESLint desde la raíz del repositorio para poder revisar también esa carpeta.
+- `tests/trivia-frontend/tsconfig.json` permite que el editor reconozca los tipos de Aurelia y Jest en las pruebas.
