@@ -1,5 +1,7 @@
 # battlehub-game-trivia
 
+[![CI](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci.yml)
+
 Microservicio del juego **Trivia Battle** (Equipo 5) del proyecto BattleHub.
 
 Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://github.com/javiercoulon-public/battlehub-contracts).
