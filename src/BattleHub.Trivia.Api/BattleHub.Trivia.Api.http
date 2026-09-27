@@ -1,0 +1,5 @@
+@BattleHub.Trivia.Api_HostAddress = http://localhost:5185
+
+GET {{BattleHub.Trivia.Api_HostAddress}}/health
+
+###

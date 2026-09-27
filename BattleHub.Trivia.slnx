@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BattleHub.Trivia.Api/BattleHub.Trivia.Api.csproj" />
+    <Project Path="src/BattleHub.Trivia.Data/BattleHub.Trivia.Data.csproj" />
+    <Project Path="src/BattleHub.Trivia.Domain/BattleHub.Trivia.Domain.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BattleHub.Trivia.IntegrationTests/BattleHub.Trivia.IntegrationTests.csproj" />
+    <Project Path="tests/BattleHub.Trivia.UnitTests/BattleHub.Trivia.UnitTests.csproj" />
+  </Folder>
+</Solution>
