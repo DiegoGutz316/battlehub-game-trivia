@@ -1,0 +1,54 @@
+# .gitignore de battlehub-game-trivia (Equipo 5 - Trivia Battle)
+# Basado en battlehub-contracts/helpers/gitignore-template.txt,
+# adaptado al stack del equipo: API en .NET 10 + microfrontend en Aurelia (Node).
+
+# ===== General / SO =====
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+
+# ===== Variables de entorno / secretos =====
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+appsettings.Local.json
+*.pfx
+*.pem
+
+# ===== IDEs / Editores =====
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+
+# ===== .NET =====
+bin/
+obj/
+*.dll
+*.pdb
+*.nupkg
+
+# ===== Node / JavaScript / TypeScript (Aurelia) =====
+node_modules/
+dist/
+build/
+coverage/
+.nyc_output/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ===== Bases de datos locales =====
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# ===== Artefactos de pruebas/CI =====
+TestResults/
+*.trx
