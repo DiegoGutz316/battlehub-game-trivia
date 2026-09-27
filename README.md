@@ -16,13 +16,17 @@ Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://git
 ```text
 .github/workflows/                   → pipeline de CI (build + pruebas unitarias + pruebas de integración)
 src/
-  BattleHub.Trivia.Api/              → backend .NET 10
+  BattleHub.Trivia.Api/              → backend .NET 10 (punto de entrada)
     Controllers/                     → endpoints REST /api/games/trivia/...
     Hubs/                            → hub de SignalR /hubs/trivia
     Services/                        → lógica del juego (preguntas, puntajes, ganador) y notificación a Matchmaking
-    Data/                            → acceso a la base de datos
-    Models/                          → entidades persistidas (partida, jugador, resultado, pregunta)
     Dtos/                            → modelos de entrada/salida de la API
+  BattleHub.Trivia.Domain/           → núcleo del dominio, sin dependencias de otros proyectos
+    Entities/                        → entidades (partida, jugador, resultado, pregunta)
+    Interfaces/                      → contratos de repositorios (ej. IResultRepository)
+  BattleHub.Trivia.Data/             → persistencia (depende de Domain)
+    Context/                         → contexto/conexión de la base de datos
+    Repositories/                    → implementaciones de las interfaces de Domain
   trivia-frontend/                   → microfrontend Aurelia
     src/contracts/                   → GameModule y GameContext (contrato de battlehub-contracts)
     src/components/                  → vistas del juego (pregunta, opciones, marcador)
