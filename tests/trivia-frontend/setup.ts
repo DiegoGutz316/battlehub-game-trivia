@@ -16,13 +16,14 @@ beforeAll(() => {
   });
 });
 
-afterEach(() => {
-  fixtures.forEach(async f => {
+// Espera a que cada fixture se detenga antes de pasar a la siguiente prueba.
+afterEach(async () => {
+  const pending = fixtures.splice(0, fixtures.length);
+  for (const f of pending) {
     try {
       await f.stop(true);
     } catch {
       // ignore
     }
-  });
-  fixtures.length = 0;
+  }
 });
