@@ -3,3 +3,33 @@
 GET {{BattleHub.Trivia.Api_HostAddress}}/health
 
 ###
+
+POST {{BattleHub.Trivia.Api_HostAddress}}/api/games/trivia/results
+Content-Type: application/json
+
+{
+  "matchId": "match-001",
+  "gameType": "trivia",
+  "players": [
+    { "userId": "user-001", "displayName": "Francisco", "score": 850 },
+    { "userId": "user-002", "displayName": "Ana", "score": 620 }
+  ],
+  "startedAt": "2026-09-02T20:00:00Z",
+  "finishedAt": "2026-09-02T20:07:32Z",
+  "winnerUserId": "user-001",
+  "metadata": {}
+}
+
+###
+
+GET {{BattleHub.Trivia.Api_HostAddress}}/api/games/trivia/results/match-001
+
+###
+
+GET {{BattleHub.Trivia.Api_HostAddress}}/api/games/trivia/players/user-001/history
+
+###
+
+GET {{BattleHub.Trivia.Api_HostAddress}}/api/games/trivia/players/user-001/stats
+
+###
