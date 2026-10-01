@@ -45,7 +45,7 @@ jobs:
       - name: Setup Node 24
         uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version-file: src/trivia-frontend/.nvmrc
           cache: npm
           cache-dependency-path: src/trivia-frontend/package-lock.json
 
@@ -59,4 +59,4 @@ jobs:
         run: npm run build
 
       - name: Unit tests
-        run: npm test
+        run: npx jest --ci

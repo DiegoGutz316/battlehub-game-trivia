@@ -1,0 +1,17 @@
+.trivia-dev {
+  font-family: system-ui, sans-serif;
+}
+
+.trivia-dev-error {
+  color: #b91c1c;
+}
+
+.trivia-dev-game-area {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 1024px;
+  max-width: 1440px;
+  min-height: 700px;
+  padding: 16px;
+  border: 2px dashed #64748b;
+}

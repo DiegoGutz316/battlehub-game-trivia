@@ -1,0 +1,22 @@
+<div class="trivia-dev">
+  <h2>Modo desarrollo (sin Shell)</h2>
+  <p>
+    Contexto simulado: partida <strong>${context.matchId}</strong> ·
+    jugador <strong>${context.currentUser.displayName}</strong> (${context.currentUser.id})
+  </p>
+  <p>
+    Para simular otro jugador, abrir otra pestaña con
+    <code>?userId=user-dev-2&amp;displayName=Jugador%202</code>
+  </p>
+  <p>
+    <button click.trigger="start()">start()</button>
+    <button click.trigger="pause()">pause()</button>
+    <button click.trigger="dispose()">dispose()</button>
+  </p>
+  <p class="trivia-dev-error" if.bind="error" data-testid="dev-error">LIFECYCLE_ERROR: ${error}</p>
+
+  <!-- Área del juego con los tamaños mínimo y máximo del contrato visual (03-contratos-tecnicos.md §7). -->
+  <div class="trivia-dev-game-area">
+    <trivia-game-module component.ref="game"></trivia-game-module>
+  </div>
+</div>
