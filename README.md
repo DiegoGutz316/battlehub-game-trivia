@@ -31,9 +31,11 @@ src/
   BattleHub.Trivia.Data/             → persistencia (depende de Domain)
     Context/                         → contexto/conexión de la base de datos
     Repositories/                    → implementaciones de las interfaces de Domain
-  trivia-frontend/                   → microfrontend Aurelia 2 (webpack + TypeScript)
-    src/trivia-app.*                 → componente raíz del microfrontend
+  trivia-frontend/                   → microfrontend Aurelia 2 (webpack + TypeScript), remote de Module Federation
+    mf-shared.js                     → dependencias compartidas con el Shell (ADR-003, no modificar)
+    src/game-module.*                → GameModule: lo que el Shell carga (initialize, start, pause, dispose)
     src/contracts/                   → GameModule y GameContext (contrato de battlehub-contracts)
+    src/dev/                         → arnés de desarrollo que simula el Shell (solo para npm start)
     src/components/                  → vistas del juego (pregunta, opciones, marcador)
     src/services/                    → conexión al hub y cliente de la API
 tests/
@@ -69,23 +71,55 @@ Cada clase de prueba debe marcarse con `[Trait("Category", "Unit")]` o `[Trait("
 
 ### Frontend (Aurelia)
 
-Requisito: [Node.js 24](https://nodejs.org/).
+Requisito: [Node.js 24 LTS](https://nodejs.org/) (`>=24.11.0 <25`, fijado en `.nvmrc` y en `engines` por el ADR-003).
 
 Todos los comandos se corren desde `src/trivia-frontend`:
 
 ```bash
 cd src/trivia-frontend
 npm ci           # instalar dependencias (usa package-lock.json)
-npm start        # servidor de desarrollo en http://localhost:9000
+npm start        # juego solo, en http://localhost:4002 (modo desarrollo, sin Shell)
 ```
 
-Los mismos comandos que corre el CI:
+Los mismos pasos que corre el CI:
 
 ```bash
 npm run lint     # ESLint (código y pruebas) + Stylelint
-npm run build    # build de producción en dist/
-npm test         # pruebas unitarias con Jest
+npm run build    # build de producción en dist/ (genera dist/remoteEntry.js)
+npm test         # lint + pruebas unitarias con Jest
 ```
+
+#### Modo desarrollo (sin Shell)
+
+`npm start` abre un arnés que simula lo que hace el Shell: llama a `initialize()` con un contexto de prueba y tiene botones para `start()`, `pause()` y `dispose()`. Si el juego rechaza una llamada, muestra el error como lo haría el Shell (`LIFECYCLE_ERROR`).
+
+La partida y el jugador simulados se cambian por la URL. Para probar con dos jugadores, abrir dos pestañas:
+
+```text
+http://localhost:4002/
+http://localhost:4002/?userId=user-dev-2&displayName=Jugador%202
+```
+
+#### Integración con el Shell (Module Federation, ADR-003)
+
+| Dato | Valor |
+|---|---|
+| Nombre del remote | `triviaGame` |
+| Punto de entrada | `http://localhost:4002/remoteEntry.js` (local) |
+| Módulo expuesto | `./GameModule`, que exporta la clase `GameModule` (elemento `trivia-game-module`) |
+| Prefijo de clases CSS | `trivia-game` |
+
+Entrada para el `remotes.config.json` del Shell:
+
+```json
+{ "trivia": { "scope": "triviaGame", "url": "http://localhost:4002/remoteEntry.js", "module": "./GameModule" } }
+```
+
+Para probarlo dentro del Shell se puede usar la prueba de concepto del Equipo 3 ([battlehub-shell/poc](https://github.com/KeynerMC/battlehub-shell/tree/main/poc)): con `npm start` corriendo aquí, poner esa entrada en `poc/shell/config/remotes.local.json` y `gameType: 'trivia'` en `poc/shell/src/my-app.ts`. Capturas de esa prueba: `docs/evidencias/adr-003/`.
+
+Si se usa otro paquete `@aurelia/*` además de los de `mf-shared.js`, hay que agregarlo ahí y avisar al Equipo 3.
+
+#### Pruebas
 
 Las pruebas viven en `tests/trivia-frontend/` (fuera del proyecto, como pide la estructura mínima del proyecto). Para que funcionen desde ahí:
 

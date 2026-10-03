@@ -1,8 +1,11 @@
 {
-  "name": "trivia-frontend",
+  "name": "battlehub-game-trivia",
   "description": "Microfrontend de Trivia Battle (BattleHub - Equipo 5).",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24.11.0 <25"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/DiegoGutz316/battlehub-game-trivia.git"
@@ -46,6 +49,7 @@
     "lint:js": "cd ../.. && eslint --config src/trivia-frontend/eslint.config.mjs \"src/trivia-frontend/src/**/*.{js,ts}\" \"tests/trivia-frontend/**/*.ts\"",
     "lint:css": "stylelint \"src/**/*.css\"",
     "lint": "npm run lint:js && npm run lint:css",
+    "pretest": "npm run lint",
     "start": "webpack serve",
     "build": "webpack --env production",
     "analyze": "webpack --env production --analyze",

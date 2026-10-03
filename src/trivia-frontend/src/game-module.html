@@ -1,0 +1,12 @@
+<!-- ADR-003 §8 / contrato visual §7: solo se dibuja dentro del área del juego.
+     Área superior (juego, partida, jugador) y área central, donde van las pantallas de components/. -->
+<section class="trivia-game">
+  <header class="trivia-game-top">
+    <strong>Trivia Battle</strong>
+    <span>Partida: <span data-testid="match-id">${context.matchId}</span></span>
+    <span>Jugador: <span data-testid="player-name">${context.currentUser.displayName}</span></span>
+    <span>Estado: <span data-testid="game-state">${state}</span></span>
+  </header>
+
+  <main class="trivia-game-center"></main>
+</section>

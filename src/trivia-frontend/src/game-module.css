@@ -1,0 +1,21 @@
+/* ADR-003 §8: TODAS las clases con el prefijo trivia-game para no afectar el layout del Shell.
+   Nunca estilos sobre body, html, header, * ni etiquetas sueltas. */
+.trivia-game {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 400px;
+}
+
+.trivia-game-top {
+  display: flex;
+  gap: 24px;
+  padding: 8px 12px;
+  background: #eef2ff;
+  border-radius: 6px;
+}
+
+.trivia-game-center {
+  flex: 1;
+  padding: 12px;
+}
