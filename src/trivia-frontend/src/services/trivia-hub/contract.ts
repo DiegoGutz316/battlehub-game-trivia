@@ -59,6 +59,7 @@ export const TRIVIA_HUB_METHODS = {
 
 export interface JoinMatchRequest {
   matchId: string;
+  matchmakingAccessToken?: string;
 }
 
 export interface SubmitAnswerRequest {

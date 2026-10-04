@@ -13,7 +13,8 @@
   "license": "UNLICENSED",
   "dependencies": {
     "aurelia": "2.0.0-rc.2",
-    "@aurelia/router": "2.0.0-rc.2"
+    "@aurelia/router": "2.0.0-rc.2",
+    "@microsoft/signalr": "10.0.0"
   },
   "devDependencies": {
     "eslint": "^9.17.0",
