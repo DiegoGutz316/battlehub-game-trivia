@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
       <PrivateAssets>all</PrivateAssets>
@@ -20,4 +21,7 @@
     <ProjectReference Include="..\BattleHub.Trivia.Data\BattleHub.Trivia.Data.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="../BattleHub.Trivia.Data/Scripts/inicializar-banco-preguntas.sql" LogicalName="QuestionBank.sql" />
+  </ItemGroup>
 </Project>
