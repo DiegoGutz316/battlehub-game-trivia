@@ -13,6 +13,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 const { ModuleFederationPlugin } = require('webpack').container;
 const sharedDeps = require('./mf-shared');
+const { DefinePlugin } = require('webpack');
 
 module.exports = function (env) {
   const production = env.production || process.env.NODE_ENV === 'production';
@@ -50,6 +51,7 @@ module.exports = function (env) {
       ],
     },
     plugins: [
+      new DefinePlugin({ 'process.env.TRIVIA_API_URL': JSON.stringify(process.env.TRIVIA_API_URL || 'http://localhost:5185') }),
       new ModuleFederationPlugin({
         name: REMOTE_NAME,
         filename: 'remoteEntry.js',                          // ADR-003 §2
@@ -57,7 +59,7 @@ module.exports = function (env) {
         shared: sharedDeps,                                  // ADR-003 §3
       }),
       new HtmlWebpackPlugin({ template: 'index.html', favicon: 'favicon.ico' }),
-      new Dotenv({ path: `./.env${production ? '' : '.' + (process.env.NODE_ENV || 'development')}` }),
+      new Dotenv({ path: `./.env${production ? '' : '.' + (process.env.NODE_ENV || 'development')}`, silent: true }),
     ],
   };
 };

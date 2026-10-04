@@ -1,12 +1,36 @@
-<!-- ADR-003 §8 / contrato visual §7: solo se dibuja dentro del área del juego.
-     Área superior (juego, partida, jugador) y área central, donde van las pantallas de components/. -->
-<section class="trivia-game">
-  <header class="trivia-game-top">
-    <strong>Trivia Battle</strong>
-    <span>Partida: <span data-testid="match-id">${context.matchId}</span></span>
-    <span>Jugador: <span data-testid="player-name">${context.currentUser.displayName}</span></span>
-    <span>Estado: <span data-testid="game-state">${state}</span></span>
-  </header>
-
-  <main class="trivia-game-center"></main>
-</section>
+﻿<template>
+  <section class="trivia-game" aria-label="Trivia Battle">
+    <header class="trivia-game-header">
+      <div><p class="trivia-game-eyebrow">BATTLEHUB · TRIVIA</p><h1>Trivia Battle</h1></div>
+      <div><span data-testid="player-name">${context.currentUser.displayName}</span><small data-testid="match-id">${context.matchId}</small><small data-testid="game-state">${state}</small></div>
+    </header>
+    <p if.bind="preview" class="trivia-game-notice">Vista previa. Para jugar una partida real, abre Trivia desde las salas del Shell.</p>
+    <p if.bind="error" class="trivia-game-error" role="alert">${error}</p>
+    <p if.bind="state === 'paused'" class="trivia-game-notice">La vista está pausada. La partida compartida continúa en el servidor.</p>
+    <p if.bind="!preview && connection !== 'connected'" class="trivia-game-notice" aria-live="polite">Conexión: ${connection}. Las respuestas se habilitarán cuando estés conectado.</p>
+    <div class="trivia-game-layout">
+      <main class="trivia-game-panel">
+        <div if.bind="phase === 'waiting'"><h2>Preparando la partida</h2><p>Esperamos a los jugadores. Diez preguntas, cuatro opciones y quince segundos para responder.</p></div>
+        <div if.bind="question && phase !== 'finished'">
+          <div class="trivia-game-question-meta"><span>Pregunta ${question.questionNumber} de ${question.totalQuestions} · ${question.category}</span><strong>${phase === 'playing' ? seconds + ' s' : 'Revisión'}</strong></div>
+          <h2>${question.text}</h2>
+          <div class="trivia-game-options">
+            <button repeat.for="option of question.options" type="button" click.trigger="answer(option.answerId)"
+              class="${review && review.correctAnswerId === option.answerId ? 'trivia-game-correct' : selectedAnswerId === option.answerId ? 'trivia-game-selected' : ''}"
+              disabled.bind="phase !== 'playing' || state !== 'running' || connection !== 'connected' || answered || submitting || seconds <= 0">${option.text}</button>
+          </div>
+          <p if.bind="answered && phase === 'playing'" aria-live="polite">Respuesta recibida. Espera el resultado de la ronda.</p>
+          <p if.bind="review" aria-live="polite">${review.isCorrect ? '¡Correcto!' : 'Ronda cerrada.'} +${review.pointsEarned} puntos · Total: ${review.totalScore}</p>
+        </div>
+        <div if.bind="result">
+          <h2>${result.isTie ? '¡Empate!' : result.winnerUserId === context.currentUser.id ? '¡Ganaste!' : 'Partida finalizada'}</h2>
+          <p if.bind="result.decidedByTiebreak">El tiempo de las respuestas correctas decidió el desempate.</p>
+          <ol><li repeat.for="player of result.players">${player.position}. ${player.displayName}: ${player.score} puntos · ${player.correctAnswers} aciertos</li></ol>
+          <button type="button" click.trigger="loadHistory()" disabled.bind="loadingHistory">${loadingHistory ? 'Cargando…' : 'Ver mi historial y estadísticas'}</button>
+        </div>
+      </main>
+      <aside class="trivia-game-panel"><h2>Jugadores</h2><ul><li repeat.for="player of players"><span>${player.displayName} ${player.isConnected ? '●' : '○'}</span><strong>${player.score}</strong></li></ul></aside>
+    </div>
+    <section if.bind="statistics" class="trivia-game-panel"><h2>Mi historial</h2><p>Partidas: ${statistics.matchesPlayed} · Victorias: ${statistics.wins} · Promedio: ${statistics.averageScore} · Mejor puntaje: ${statistics.bestScore}</p><ul><li repeat.for="item of history">${item.matchId} · ${myScore(item)} puntos</li></ul></section>
+  </section>
+</template>
