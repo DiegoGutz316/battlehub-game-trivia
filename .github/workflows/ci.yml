@@ -28,10 +28,10 @@ jobs:
         run: dotnet build --no-restore
 
       - name: Unit tests
-        run: dotnet test --no-build --filter Category=Unit
+        run: dotnet test tests/BattleHub.Trivia.UnitTests --no-build
 
       - name: Integration tests
-        run: dotnet test --no-build --filter Category=Integration
+        run: dotnet test tests/BattleHub.Trivia.IntegrationTests --no-build
 
   frontend:
     name: frontend

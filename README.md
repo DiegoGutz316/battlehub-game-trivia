@@ -4,6 +4,10 @@
 
 Microservicio del juego **Trivia Battle** (Equipo 5) del proyecto BattleHub.
 
+## Entrega de integración local
+
+La implementación local del Shell y el juego se explica en [Integración con Auth0 y Matchmaking](docs/integracion-shell-auth0.md). Incluye partidas SignalR, resultado persistido y cola M2M. Revisar esa guía antes de los comandos históricos de este README; no implica publicación ni aprobación de extensiones del contrato central.
+
 Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://github.com/javiercoulon-public/battlehub-contracts).
 
 ## Componentes
