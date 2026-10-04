@@ -54,6 +54,31 @@ public sealed class TriviaGameService
         });
     }
 
+    public Question StartNextQuestion(
+    GameMatch match,
+    DateTimeOffset startedAt)
+{
+    if (match.IsFinished)
+    {
+        throw new InvalidOperationException(
+            "La partida ya terminó.");
+    }
+
+    var nextIndex = match.CurrentQuestionIndex + 1;
+
+    if (nextIndex >= match.Questions.Count)
+    {
+        throw new InvalidOperationException(
+            "No quedan preguntas disponibles.");
+    }
+
+    match.CurrentQuestionIndex = nextIndex;
+    match.QuestionStartedAt = startedAt;
+    match.CurrentAnswers.Clear();
+
+    return match.CurrentQuestion!;
+}
+
     public int SubmitAnswer(
     GameMatch match,
     string userId,
@@ -129,5 +154,74 @@ public sealed class TriviaGameService
     }
 
     return points;
+}
+
+public bool CloseCurrentQuestion(
+    GameMatch match,
+    DateTimeOffset closedAt)
+{
+    if (match.IsFinished)
+    {
+        throw new InvalidOperationException(
+            "La partida ya terminó.");
+    }
+
+    if (match.CurrentQuestion is null ||
+        match.QuestionStartedAt is null)
+    {
+        throw new InvalidOperationException(
+            "No hay una pregunta activa.");
+    }
+
+    match.QuestionStartedAt = null;
+
+    var isLastQuestion =
+        match.CurrentQuestionIndex >= match.Questions.Count - 1;
+
+    if (isLastQuestion)
+    {
+        match.IsFinished = true;
+        match.FinishedAt = closedAt;
+        return true;
+    }
+
+    return false;
+}
+
+public GamePlayer? GetWinner(GameMatch match)
+{
+    if (!match.IsFinished)
+    {
+        throw new InvalidOperationException(
+            "La partida todavía no ha terminado.");
+    }
+
+    if (match.Players.Count == 0)
+    {
+        return null;
+    }
+
+    var highestScore = match.Players.Max(player => player.Score);
+
+    var playersWithHighestScore = match.Players
+        .Where(player => player.Score == highestScore)
+        .ToList();
+
+    if (playersWithHighestScore.Count == 1)
+    {
+        return playersWithHighestScore[0];
+    }
+
+    var fastestTime = playersWithHighestScore
+        .Min(player => player.CorrectAnswersTimeMs);
+
+    var fastestPlayers = playersWithHighestScore
+        .Where(player =>
+            player.CorrectAnswersTimeMs == fastestTime)
+        .ToList();
+
+    return fastestPlayers.Count == 1
+        ? fastestPlayers[0]
+        : null;
 }
 }
