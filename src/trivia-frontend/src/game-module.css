@@ -1,21 +1,115 @@
-/* ADR-003 §8: TODAS las clases con el prefijo trivia-game para no afectar el layout del Shell.
-   Nunca estilos sobre body, html, header, * ni etiquetas sueltas. */
 .trivia-game {
+  color: #f3f4ff;
+  background: #101321;
+  padding: 24px;
+  border-radius: 20px;
+  font-family: system-ui, sans-serif;
+}
+
+.trivia-game-header, .trivia-game-question-meta, .trivia-game li {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.trivia-game small {
+  display: block;
+  color: #b8bfd8;
+}
+
+.trivia-game-eyebrow {
+  color: #b99dff;
+  font-weight: 700;
+}
+
+.trivia-game-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);
+  gap: 20px;
+}
+
+.trivia-game-panel {
+  background: #1c2135;
+  padding: 24px;
+  border-radius: 16px;
+  margin-top: 20px;
+}
+
+.trivia-game h2 {
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+.trivia-game-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
-  min-height: 400px;
 }
 
-.trivia-game-top {
-  display: flex;
-  gap: 24px;
-  padding: 8px 12px;
-  background: #eef2ff;
-  border-radius: 6px;
+.trivia-game button {
+  color: #f3f4ff;
+  background: #343a56;
+  border: 2px solid #596080;
+  padding: 16px;
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
-.trivia-game-center {
-  flex: 1;
+.trivia-game button:focus-visible {
+  outline: 3px solid #bd9bff;
+  outline-offset: 3px;
+}
+
+.trivia-game button:disabled {
+  cursor: default;
+}
+
+.trivia-game .trivia-game-selected {
+  background: #60439c;
+  border-color: #bb91ff;
+}
+
+.trivia-game .trivia-game-correct {
+  background: #164f43;
+  border-color: #62dcb4;
+}
+
+.trivia-game ul, .trivia-game ol {
+  padding: 0;
+  list-style: none;
+}
+
+.trivia-game li {
+  padding: 10px 0;
+  border-bottom: 1px solid #38405b;
+}
+
+.trivia-game-notice {
+  background: #303450;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.trivia-game-error {
+  background: #552839;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+@media (width <= 720px) {
+  .trivia-game {
   padding: 12px;
+}
+
+  .trivia-game-layout, .trivia-game-options {
+  grid-template-columns: 1fr;
+}
+
+  .trivia-game-header {
+  align-items: start;
+  flex-direction: column;
+}
 }
