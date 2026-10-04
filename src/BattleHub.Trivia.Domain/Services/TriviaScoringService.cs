@@ -21,6 +21,6 @@ public sealed class TriviaScoringService
         var remainingSeconds =
             (int)Math.Floor(QuestionTimeSeconds - elapsed.TotalSeconds);
 
-        return BasePoints + (remainingSeconds * PointsPerRemainingSecond);
+        return Math.Min(240, BasePoints + (remainingSeconds * PointsPerRemainingSecond));
     }
 }

@@ -19,6 +19,7 @@ public sealed class ResultRepository(TriviaDbContext db) : IResultRepository
             throw new MatchAlreadyExistsException(result.MatchId);
 
         db.MatchResults.Add(ToRecord(result));
+        db.FinishNotifications.Add(new FinishNotificationRecord { MatchId = result.MatchId });
 
         try
         {
