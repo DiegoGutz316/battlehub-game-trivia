@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([string]$ClientId)
+param([string]$ClientId = 'xYhNYG9lOGLA6KvEM0Y4cccH2f7JDD5x')
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $ClientId) { $ClientId = Read-Host 'Client ID de BattleHub Trivia Service (M2M)' }
