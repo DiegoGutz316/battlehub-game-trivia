@@ -1,6 +1,6 @@
 ﻿# Integración local: Shell, Auth0 y Matchmaking
 
-Preparada contra `DiegoGutz316/battlehub-game-trivia`, `main`, commit `c791635`, el 2026-10-04. Son cambios locales para revisión del Equipo 5; no están publicados en su repositorio. Las extensiones de contexto y participantes son acuerdos de integración propuestos, no cambios aprobados del contrato del profesor.
+Actualizada contra `DiegoGutz316/battlehub-game-trivia`, `main`, commit `58b2732`, el 2026-10-04. El código de integración ya está publicado en esa base. Esta entrega añade la configuración pública del cliente M2M confirmado y estas instrucciones; esos ajustes siguen locales. Las extensiones de contexto y participantes son acuerdos de integración propuestos, no cambios aprobados del contrato del profesor.
 
 ## Qué se implementó
 
@@ -32,9 +32,9 @@ La audiencia compartida de Profile/Matchmaking sigue tratándose como la propues
 
 La API de jugadores BattleHub Trivia API debe tener el Identifier de Trivia, RS256 y acceso delegado autorizado para BattleHub Shell. El usuario confirmó ese registro mediante captura; no se verificó el tenant mediante API administrativa.
 
-Para el aviso de finalización crear o confirmar una **aplicación Machine to Machine BattleHub Trivia Service**, distinta de la API y de sus aplicaciones de prueba. Autorizarla en **BattleHub Profile Service**, Identifier `https://api.battlehub.local/profile`, solamente con `matches.finish`.
+Para el aviso de finalización crear o confirmar una **aplicación Machine to Machine BattleHub Trivia Service**, distinta del recurso API de jugadores. Se reutilizó la aplicación M2M de prueba de Trivia; cambiar su nombre no cambia su Client ID. Autorizarla en **BattleHub Profile Service**, Identifier `https://api.battlehub.local/profile`, solamente con `matches.finish`.
 
-Compartir el Client ID con Equipo 2 para el mapa de clientes autorizados. Entregar el Client Secret solamente al responsable del backend de Trivia por canal privado. No se usa el Client ID de BattleHub Shell ni el de BattleHub Trivia API (Test Application).
+Compartir el Client ID con Equipo 2 para el mapa de clientes autorizados. Entregar el Client Secret solamente al responsable del backend de Trivia por canal privado. No se usa el Client ID de BattleHub Shell. El cliente M2M confirmado es `xYhNYG9lOGLA6KvEM0Y4cccH2f7JDD5x`: la captura muestra el acceso Client Access sobre Profile con `matches.finish` (1/1). El nombre de la aplicación puede seguir siendo BattleHub Trivia API; es recomendable identificarla como BattleHub Trivia Service.
 
 No se necesita un scope nuevo para que el jugador juegue: la membresía y el permiso `games.trivia.play` se validan al entrar/iniciar la sala mediante Profile y Matchmaking. Si acuerdan exigir ese permiso también en el JWT de Trivia, primero deben acordar RBAC y modificar la política; crear una API con cero permisos no añade automáticamente ese claim.
 
@@ -59,7 +59,7 @@ El script aplica migraciones y carga el banco únicamente si la tabla de pregunt
 Configurar las credenciales privadas antes de iniciar, o cuando estén disponibles:
 
 ```powershell
-dotnet user-secrets set 'Matchmaking:Auth0:ClientId' 'CLIENT_ID_TRIVIA_SERVICE' --project src/BattleHub.Trivia.Api
+dotnet user-secrets set 'Matchmaking:Auth0:ClientId' 'xYhNYG9lOGLA6KvEM0Y4cccH2f7JDD5x' --project src/BattleHub.Trivia.Api
 ```
 
 Para el secreto, usar el script `scripts/Set-MatchmakingCredentials.ps1`, que solicita el valor de forma oculta y lo guarda en los user-secrets locales. No copiarlo en documentos, código, ZIP ni capturas.
@@ -105,18 +105,18 @@ El Shell incluye estas funciones y las rechaza al cerrar el juego o cambiar sesi
 
 Su GET `/api/matches/{id}` debe devolver `id`, `gameType`, `status` y `participants: [{ userId, displayName }]`, como en la copia local preparada previamente. Debe aceptar el token de usuario de la audiencia Profile/Matchmaking.
 
-Agregar **sin borrar el cliente de Typing** en `src/BattleHub.Matchmaking.Api/appsettings.json`:
+Agregar **sin borrar los clientes existentes de Typing y Memory** en `src/BattleHub.Matchmaking.Api/appsettings.json`:
 
 ```json
 "GameServices": {
   "Clients": {
     "8BWcE4T8HxhJrxU1CtgmNkjDOpkrN4Su": "typing",
-    "CLIENT_ID_TRIVIA_SERVICE": "trivia"
+    "xYhNYG9lOGLA6KvEM0Y4cccH2f7JDD5x": "trivia"
   }
 }
 ```
 
-Alternativa privada/local, sin editar el JSON: establecer `GameServices__Clients__CLIENT_ID_TRIVIA_SERVICE=trivia` como variable de entorno del proceso de Matchmaking, reemplazando el marcador por el ID real.
+Alternativa privada/local, sin editar el JSON: establecer `GameServices__Clients__xYhNYG9lOGLA6KvEM0Y4cccH2f7JDD5x=trivia` como variable de entorno del proceso de Matchmaking, Esta variable usa el ID confirmado.
 
 Debe existir POST `/api/matches/{id}/finish` con Bearer M2M y `matches.finish`, respuesta 204 y finalización idempotente, como la entrega del Equipo 2. No admite el token de jugadores Trivia para este callback.
 
