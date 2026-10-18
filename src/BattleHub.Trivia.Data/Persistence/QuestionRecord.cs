@@ -2,6 +2,8 @@ namespace BattleHub.Trivia.Data.Persistence;
 
 public sealed class QuestionRecord
 {
+    public Guid Id { get; set; }
+
     public string QuestionId { get; set; } = "";
 
     public string Text { get; set; } = "";
