@@ -76,6 +76,11 @@
       "\\.(ts|html)$": "@aurelia/ts-jest"
     },
     "collectCoverage": true,
+    "coverageReporters": [
+      "text",
+      "json-summary",
+      "lcov"
+    ],
     "collectCoverageFrom": [
       "src/**/*.ts",
       "!src/**/*.d.ts"
