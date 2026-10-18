@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # Mínimo de cobertura de líneas (requisito del profesor).
+  COVERAGE_THRESHOLD: "85"
+  # "false": solo avisa si la cobertura es menor al mínimo. Cambiar a "true" para que el CI falle.
+  ENFORCE_COVERAGE: "false"
+
 jobs:
   backend:
     name: backend
@@ -22,16 +28,32 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore
-        run: dotnet restore
+        run: |
+          dotnet restore
+          dotnet tool restore
 
       - name: Build
         run: dotnet build --no-restore
 
       - name: Unit tests
-        run: dotnet test tests/BattleHub.Trivia.UnitTests --no-build
+        run: dotnet test tests/BattleHub.Trivia.UnitTests --no-build --collect:"XPlat Code Coverage" --results-directory coverage/raw
 
       - name: Integration tests
-        run: dotnet test tests/BattleHub.Trivia.IntegrationTests --no-build
+        run: dotnet test tests/BattleHub.Trivia.IntegrationTests --no-build --collect:"XPlat Code Coverage" --results-directory coverage/raw
+
+      - name: Coverage report
+        run: |
+          dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend "-reporttypes:JsonSummary;MarkdownSummaryGithub"
+          cat coverage/backend/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-backend
+          path: coverage/backend/Summary.json
+
+      - name: Coverage threshold
+        run: node .github/scripts/coverage.mjs check backend coverage/backend/Summary.json
 
   frontend:
     name: frontend
@@ -60,3 +82,52 @@ jobs:
 
       - name: Unit tests
         run: npx jest --ci
+
+      - name: Upload coverage summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-frontend
+          path: src/trivia-frontend/coverage/coverage-summary.json
+
+      - name: Coverage threshold
+        run: node ../../.github/scripts/coverage.mjs check frontend coverage/coverage-summary.json
+
+  coverage-comment:
+    name: coverage-comment
+    # Comenta también cuando la cobertura hace fallar backend o frontend.
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download coverage summaries
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          path: coverage
+
+      - name: Build comment
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node .github/scripts/coverage.mjs comment coverage/coverage-backend/Summary.json coverage/coverage-frontend/coverage-summary.json coverage-comment.md
+
+      - name: Post or update comment
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('coverage-comment.md', 'utf8');
+            const marker = '<!-- trivia-coverage-report -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+            const previous = comments.find(comment => comment.user?.type === 'Bot' && comment.body?.includes(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

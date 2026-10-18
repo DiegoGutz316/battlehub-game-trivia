@@ -64,14 +64,14 @@ dotnet run --project src/BattleHub.Trivia.Api
 
 La API queda en `http://localhost:5185`. Para verificar que está arriba: `GET http://localhost:5185/health` → `Healthy`.
 
-Pruebas (los mismos comandos que corre el CI):
+Pruebas (el CI ejecuta todas las pruebas de cada proyecto):
 
 ```bash
-dotnet test --filter Category=Unit          # pruebas unitarias
-dotnet test --filter Category=Integration   # pruebas de integración
+dotnet test tests/BattleHub.Trivia.UnitTests          # pruebas unitarias
+dotnet test tests/BattleHub.Trivia.IntegrationTests   # pruebas de integración (SQL Server)
 ```
 
-Cada clase de prueba debe marcarse con `[Trait("Category", "Unit")]` o `[Trait("Category", "Integration")]` para que el CI la ejecute.
+Las pruebas de integración usan SQL Server en un contenedor (Testcontainers, requiere Docker). Sin Docker se puede usar LocalDB definiendo antes `TRIVIA_TEST_CONNECTION='Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true'`.
 
 ### Frontend (Aurelia)
 
@@ -130,3 +130,28 @@ Las pruebas viven en `tests/trivia-frontend/` (fuera del proyecto, como pide la 
 - Jest busca las pruebas en esa carpeta y resuelve los paquetes desde `src/trivia-frontend/node_modules` (configuración `jest` en `package.json`).
 - `npm run lint` ejecuta ESLint desde la raíz del repositorio para poder revisar también esa carpeta.
 - `tests/trivia-frontend/tsconfig.json` permite que el editor reconozca los tipos de Aurelia y Jest en las pruebas.
+
+## Cobertura de código
+
+El CI mide la cobertura de líneas en cada ejecución:
+
+- **Backend:** las pruebas unitarias y de integración se ejecutan con `--collect:"XPlat Code Coverage"` (coverlet) y ReportGenerator une los dos reportes. El detalle por clase queda en el resumen del job `backend` en GitHub Actions.
+- **Frontend:** Jest genera `coverage/coverage-summary.json` (y el reporte HTML en `coverage/lcov-report/`).
+- **En cada pull request**, el job `coverage-comment` publica un comentario con la cobertura de backend y frontend, y lo actualiza en cada push en vez de crear uno nuevo.
+
+El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `.github/workflows/ci.yml`). Mientras la cobertura no lo alcance, `ENFORCE_COVERAGE` está en `"false"`: el CI muestra un aviso pero no falla. Para que los jobs `backend` y `frontend` fallen por debajo del mínimo, cambiar esa línea a `"true"`.
+
+Para ver la cobertura localmente:
+
+```bash
+# Backend (desde la raíz del repositorio)
+dotnet tool restore
+dotnet test tests/BattleHub.Trivia.UnitTests --collect:"XPlat Code Coverage" --results-directory coverage/raw
+dotnet test tests/BattleHub.Trivia.IntegrationTests --collect:"XPlat Code Coverage" --results-directory coverage/raw
+dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend -reporttypes:Html
+# abrir coverage/backend/index.html
+
+# Frontend (desde src/trivia-frontend)
+npx jest
+# abrir coverage/lcov-report/index.html
+```
