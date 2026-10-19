@@ -187,7 +187,7 @@ El CI mide la cobertura de líneas en cada ejecución:
 - **Frontend:** Jest genera `coverage/coverage-summary.json` (y el reporte HTML en `coverage/lcov-report/`).
 - **En cada pull request**, el job `coverage-comment` publica un comentario con la cobertura de backend y frontend, y lo actualiza en cada push en vez de crear uno nuevo.
 
-El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `.github/workflows/ci.yml`). Mientras la cobertura no lo alcance, `ENFORCE_COVERAGE` está en `"false"`: el CI muestra un aviso pero no falla. Para que los jobs `backend` y `frontend` fallen por debajo del mínimo, cambiar esa línea a `"true"`.
+El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `.github/workflows/ci.yml`), tanto en el backend como en el frontend. Con `ENFORCE_COVERAGE: "true"`, si alguna de las dos partes queda por debajo, su job (`backend` o `frontend`) falla y el PR no pasa el CI. Exactamente 85 % cumple.
 
 Para ver la cobertura localmente:
 

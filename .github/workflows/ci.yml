@@ -12,8 +12,8 @@ permissions:
 env:
   # Mínimo de cobertura de líneas (requisito del profesor).
   COVERAGE_THRESHOLD: "85"
-  # "false": solo avisa si la cobertura es menor al mínimo. Cambiar a "true" para que el CI falle.
-  ENFORCE_COVERAGE: "false"
+  # "true": los jobs backend y frontend fallan si la cobertura es menor al mínimo ("false" solo avisa).
+  ENFORCE_COVERAGE: "true"
 
 jobs:
   secrets:
