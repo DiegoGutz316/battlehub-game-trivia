@@ -6,7 +6,7 @@ import {
   isExpired,
   parseUtc,
   toDisplaySeconds,
-} from '../../../src/trivia-frontend/src/services/trivia-hub/server-clock';
+} from '../../../src/services/trivia-hub/server-clock';
 
 // Hora real del servidor al enviar QuestionStarted; la pregunta vence 15 s después.
 const SERVER_TIME = '2026-09-27T05:00:00Z';

@@ -43,10 +43,10 @@ src/
     src/dev/                         → arnés de desarrollo que simula el Shell (solo para npm start)
     src/components/                  → vistas del juego (pregunta, opciones, marcador)
     src/services/                    → conexión al hub y cliente de la API
+    test/                            → pruebas del microfrontend (Jest, archivos *.spec.ts), con las mismas carpetas que src/
 tests/
   BattleHub.Trivia.UnitTests/        → pruebas unitarias del backend (Category=Unit)
   BattleHub.Trivia.IntegrationTests/ → pruebas de integración API + base de datos (Category=Integration)
-  trivia-frontend/                   → pruebas unitarias del microfrontend (Jest, archivos *.spec.ts)
 ```
 
 ## Cómo correr localmente
@@ -103,6 +103,21 @@ npm run build    # build de producción en dist/ (genera dist/remoteEntry.js)
 npm test         # lint + pruebas unitarias con Jest
 ```
 
+#### Docker
+
+`src/trivia-frontend/Dockerfile` tiene dos etapas: compila con Node 24 Alpine y copia solo `dist/` a nginx sin root (`nginx-unprivileged`, variante `alpine-slim`), que escucha en el puerto 8080. Desde la raíz del repositorio:
+
+```bash
+docker build -t battlehub-trivia-frontend src/trivia-frontend
+docker run --rm -p 4002:8080 battlehub-trivia-frontend
+```
+
+El juego queda en `http://localhost:4002` y el Shell lo carga desde `http://localhost:4002/remoteEntry.js`, igual que con `npm start`. nginx agrega el encabezado CORS que pide el ADR-003 y evita que el navegador guarde una versión vieja de `remoteEntry.js`.
+
+La URL de la API queda escrita en el bundle al compilar, así que se cambia al construir la imagen: `docker build --build-arg TRIVIA_API_URL=https://api.ejemplo.com -t battlehub-trivia-frontend src/trivia-frontend`.
+
+El job `frontend-docker` del CI construye la imagen en cada pull request, la levanta y comprueba que sirva `remoteEntry.js` con CORS.
+
 #### Modo desarrollo (sin Shell)
 
 `npm start` abre un arnés que simula lo que hace el Shell: llama a `initialize()` con un contexto de prueba y tiene botones para `start()`, `pause()` y `dispose()`. Si el juego rechaza una llamada, muestra el error como lo haría el Shell (`LIFECYCLE_ERROR`).
@@ -135,11 +150,7 @@ Si se usa otro paquete `@aurelia/*` además de los de `mf-shared.js`, hay que ag
 
 #### Pruebas
 
-Las pruebas viven en `tests/trivia-frontend/` (fuera del proyecto, como pide la estructura mínima del proyecto). Para que funcionen desde ahí:
-
-- Jest busca las pruebas en esa carpeta y resuelve los paquetes desde `src/trivia-frontend/node_modules` (configuración `jest` en `package.json`).
-- `npm run lint` ejecuta ESLint desde la raíz del repositorio para poder revisar también esa carpeta.
-- `tests/trivia-frontend/tsconfig.json` permite que el editor reconozca los tipos de Aurelia y Jest en las pruebas.
+Las pruebas viven en `src/trivia-frontend/test/`, dentro del proyecto como en la plantilla del ADR-003, y repiten las carpetas de `src/` (por ejemplo, `test/dev/` prueba `src/dev/`). No necesitan configuración especial: Jest las busca en `test/` y `npm run lint` las revisa junto con `src/`.
 
 ## Cobertura de código
 

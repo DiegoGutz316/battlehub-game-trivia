@@ -1,6 +1,6 @@
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
-import { DevShell } from '../../../src/trivia-frontend/src/dev/dev-shell';
+import { DevShell } from '../../src/dev/dev-shell';
 
 async function renderDevShell() {
   const fixture = await createFixture(
