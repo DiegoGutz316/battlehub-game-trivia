@@ -42,10 +42,10 @@ src/
     src/dev/                         → arnés de desarrollo que simula el Shell (solo para npm start)
     src/components/                  → vistas del juego (pregunta, opciones, marcador)
     src/services/                    → conexión al hub y cliente de la API
+    test/                            → pruebas del microfrontend (Jest, archivos *.spec.ts), con las mismas carpetas que src/
 tests/
   BattleHub.Trivia.UnitTests/        → pruebas unitarias del backend (Category=Unit)
   BattleHub.Trivia.IntegrationTests/ → pruebas de integración API + base de datos (Category=Integration)
-  trivia-frontend/                   → pruebas unitarias del microfrontend (Jest, archivos *.spec.ts)
 ```
 
 ## Cómo correr localmente
@@ -125,11 +125,7 @@ Si se usa otro paquete `@aurelia/*` además de los de `mf-shared.js`, hay que ag
 
 #### Pruebas
 
-Las pruebas viven en `tests/trivia-frontend/` (fuera del proyecto, como pide la estructura mínima del proyecto). Para que funcionen desde ahí:
-
-- Jest busca las pruebas en esa carpeta y resuelve los paquetes desde `src/trivia-frontend/node_modules` (configuración `jest` en `package.json`).
-- `npm run lint` ejecuta ESLint desde la raíz del repositorio para poder revisar también esa carpeta.
-- `tests/trivia-frontend/tsconfig.json` permite que el editor reconozca los tipos de Aurelia y Jest en las pruebas.
+Las pruebas viven en `src/trivia-frontend/test/`, dentro del proyecto como en la plantilla del ADR-003, y repiten las carpetas de `src/` (por ejemplo, `test/dev/` prueba `src/dev/`). No necesitan configuración especial: Jest las busca en `test/` y `npm run lint` las revisa junto con `src/`.
 
 ## Cobertura de código
 

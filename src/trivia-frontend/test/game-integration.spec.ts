@@ -1,8 +1,8 @@
-import { GameModule } from '../../src/trivia-frontend/src/game-module';
-import type { GameContext } from '../../src/trivia-frontend/src/contracts/game-contracts';
+import { GameModule } from '../src/game-module';
+import type { GameContext } from '../src/contracts/game-contracts';
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
-import type { TriviaHubEventMap, TriviaHubEventName } from '../../src/trivia-frontend/src/services/trivia-hub/contract';
+import type { TriviaHubEventMap, TriviaHubEventName } from '../src/services/trivia-hub/contract';
 
 const mockHandlers = new Map<string, (data: never) => void>();
 let mockStateHandler: (state: string) => void;
@@ -14,7 +14,7 @@ const mockClient = {
   on: jest.fn((name: string, handler: (data: never) => void) => { mockHandlers.set(name, handler); return () => mockHandlers.delete(name); }),
   onConnectionStateChanged: jest.fn((handler: (state: string) => void) => { mockStateHandler = handler; return () => undefined; }),
 };
-jest.mock('../../src/trivia-frontend/src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn(() => mockClient) }));
+jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn(() => mockClient) }));
 const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'player-one', displayName: 'Uno' },
   getAccessToken: jest.fn(async () => 'trivia-token'), getMatchmakingAccessToken: jest.fn(async () => 'room-token') };
 function emit<E extends TriviaHubEventName>(event: E, data: TriviaHubEventMap[E]): void { mockHandlers.get(event)?.(data as never); }
