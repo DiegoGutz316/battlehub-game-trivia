@@ -55,6 +55,13 @@ tests/
 
 Requisito: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
 
+Antes del primer `dotnet run` hay que configurar `Auth:PublicKey`, la clave pública con la que la API valida los tokens. Es una clave pública, no un secreto. Cómo configurarla se explica en [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md#autenticación-de-trivia). Sin esa clave la API no arranca. Por ejemplo, con user-secrets:
+
+```bash
+# Desde la raíz del repositorio
+dotnet user-secrets set "Auth:PublicKey" "<clave pública en Base64>" --project src/BattleHub.Trivia.Api
+```
+
 Desde la raíz del repositorio (donde está `BattleHub.Trivia.slnx`):
 
 ```bash
@@ -62,6 +69,8 @@ dotnet restore
 dotnet build
 dotnet run --project src/BattleHub.Trivia.Api
 ```
+
+`dotnet run` usa el perfil `http` de `launchSettings.json`, con el entorno *Development*. Con ese perfil la API aplica las migraciones y carga sola las 30 preguntas del banco inicial, sin scripts. Si la base LocalDB `BattleHubTrivia` no existe, la crea; si ya tiene preguntas, no las vuelve a cargar.
 
 La API queda en `http://localhost:5185`. Para verificar que está arriba: `GET http://localhost:5185/health` → `Healthy`.
 
@@ -177,7 +186,8 @@ Ningún valor sensible (contraseñas, Client Secret, tokens, API keys) se escrib
 | `ConnectionStrings:Trivia` | `ConnectionStrings__Trivia` | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno |
 | `Matchmaking:Auth0:ClientSecret` | `Matchmaking__Auth0__ClientSecret` | **Sí** | Local: user-secrets. Docker o servidor: variable de entorno |
 | `Auth:Domain`, `Auth:Audience`, `Matchmaking:Auth0:Domain`, `Matchmaking:Auth0:Audience`, `Matchmaking:Auth0:ClientId` | `Auth__Domain`, etc. | No: identificadores públicos de Auth0 | `appsettings.json` |
-| `Matchmaking:BaseUrl`, `Cors:Origins`, `Database:MigrateOnStartup`, `Database:SeedQuestions` | `Matchmaking__BaseUrl`, `Cors__Origins__0`, etc. | No | `appsettings.json`; se reemplazan por variable de entorno según el ambiente |
+| `Matchmaking:BaseUrl`, `Cors:Origins` | `Matchmaking__BaseUrl`, `Cors__Origins__0`, etc. | No | `appsettings.json`; se reemplazan por variable de entorno según el ambiente |
+| `Database:MigrateOnStartup`, `Database:SeedQuestions` | `Database__MigrateOnStartup`, `Database__SeedQuestions` | No | `false` en `appsettings.json` y `true` en el perfil de desarrollo (`launchSettings.json`). Fuera de *Development*, o con `dotnet run --no-launch-profile`, se activan por configuración o variable de entorno |
 | `TRIVIA_API_URL` (frontend) | `TRIVIA_API_URL` | No | Variable de entorno antes de `npm start` o `npm run build` |
 
 **En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno *Development*:
@@ -187,8 +197,6 @@ Ningún valor sensible (contraseñas, Client Secret, tokens, API keys) se escrib
 dotnet user-secrets set "ConnectionStrings:Trivia" "Server=...;Database=BattleHubTrivia;..." --project src/BattleHub.Trivia.Api
 dotnet user-secrets list --project src/BattleHub.Trivia.Api
 ```
-
-Para el Client Secret conviene usar `scripts/Set-MatchmakingCredentials.ps1`, que lo pide de forma oculta: así no queda en el historial de la terminal.
 
 **En Docker o en un servidor**, copiar `.env.example` como `.env` (ignorado por git), completarlo ahí y pasarlo con `docker run --env-file .env ...`, o usar la configuración de secretos del servidor.
 

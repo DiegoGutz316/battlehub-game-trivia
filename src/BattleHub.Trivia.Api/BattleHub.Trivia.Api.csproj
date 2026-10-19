@@ -20,8 +20,4 @@
     <ProjectReference Include="..\BattleHub.Trivia.Domain\BattleHub.Trivia.Domain.csproj" />
     <ProjectReference Include="..\BattleHub.Trivia.Data\BattleHub.Trivia.Data.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="../BattleHub.Trivia.Data/Scripts/inicializar-banco-preguntas.sql" LogicalName="QuestionBank.sql" />
-  </ItemGroup>
 </Project>
