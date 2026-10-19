@@ -2,8 +2,9 @@
 -- No forma parte de las migraciones: ejecutarlo a mano contra BattleHubTrivia
 -- cuando haga falta cargar datos de ejemplo.
 
-INSERT INTO Questions (QuestionId, Text, Category, Difficulty, CorrectAnswerId)
-VALUES
+INSERT INTO Questions (Id, QuestionId, Text, Category, Difficulty, CorrectAnswerId)
+SELECT NEWID(), v.QuestionId, v.Text, v.Category, v.Difficulty, v.CorrectAnswerId
+FROM (VALUES
     (N'q-001', N'¿Cuál es la capital de Costa Rica?', N'Geografía', N'facil', N'a'),
     (N'q-002', N'¿Cuántos jugadores como máximo pueden compartir una sala de BattleHub?', N'BattleHub', N'media', N'c'),
 
@@ -39,10 +40,12 @@ VALUES
     (N'q-027', N'¿En qué año llegó el ser humano por primera vez a la Luna?', N'Cultura general', N'dificil', N'd'),
     (N'q-028', N'¿Cuál es la moneda oficial de Japón?', N'Cultura general', N'facil', N'b'),
     (N'q-029', N'¿Quién compuso la Novena Sinfonía?', N'Cultura general', N'dificil', N'a'),
-    (N'q-030', N'¿Cuál es la obra épica atribuida a Homero que narra el regreso de Odiseo?', N'Cultura general', N'dificil', N'c');
+    (N'q-030', N'¿Cuál es la obra épica atribuida a Homero que narra el regreso de Odiseo?', N'Cultura general', N'dificil', N'c')
+) AS v(QuestionId, Text, Category, Difficulty, CorrectAnswerId);
 
-INSERT INTO AnswerOptions (QuestionId, AnswerId, Text)
-VALUES
+INSERT INTO AnswerOptions (Id, QuestionRefId, QuestionId, AnswerId, Text)
+SELECT NEWID(), q.Id, v.QuestionId, v.AnswerId, v.Text
+FROM (VALUES
     (N'q-001', N'a', N'San José'),
     (N'q-001', N'b', N'Cartago'),
     (N'q-001', N'c', N'Alajuela'),
@@ -191,4 +194,6 @@ VALUES
     (N'q-030', N'a', N'La Ilíada'),
     (N'q-030', N'b', N'La Eneida'),
     (N'q-030', N'c', N'La Odisea'),
-    (N'q-030', N'd', N'Edipo Rey');
+    (N'q-030', N'd', N'Edipo Rey')
+) AS v(QuestionId, AnswerId, Text)
+JOIN Questions q ON q.QuestionId = v.QuestionId;

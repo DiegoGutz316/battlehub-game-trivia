@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace BattleHub.Trivia.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class AgregarColaFinalizacion : Migration
+    public partial class CrearTablaFinishNotifications : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -15,20 +15,22 @@ namespace BattleHub.Trivia.Data.Migrations
                 name: "FinishNotifications",
                 columns: table => new
                 {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    MatchRefId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     MatchId = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
                     NextAttemptAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     Attempts = table.Column<int>(type: "int", nullable: false),
-                    Blocked = table.Column<bool>(type: "bit", nullable: false),
-                    Delivered = table.Column<bool>(type: "bit", nullable: false)
+                    Delivered = table.Column<bool>(type: "bit", nullable: false),
+                    Blocked = table.Column<bool>(type: "bit", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_FinishNotifications", x => x.MatchId);
+                    table.PrimaryKey("PK_FinishNotifications", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_FinishNotifications_MatchResults_MatchId",
-                        column: x => x.MatchId,
+                        name: "FK_FinishNotifications_MatchResults_MatchRefId",
+                        column: x => x.MatchRefId,
                         principalTable: "MatchResults",
-                        principalColumn: "MatchId",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -36,6 +38,18 @@ namespace BattleHub.Trivia.Data.Migrations
                 name: "IX_FinishNotifications_Delivered_NextAttemptAt",
                 table: "FinishNotifications",
                 columns: new[] { "Delivered", "NextAttemptAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FinishNotifications_MatchId",
+                table: "FinishNotifications",
+                column: "MatchId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FinishNotifications_MatchRefId",
+                table: "FinishNotifications",
+                column: "MatchRefId",
+                unique: true);
         }
 
         /// <inheritdoc />
