@@ -47,7 +47,7 @@
     "@aurelia/ts-jest": "2.0.0-rc.2"
   },
   "scripts": {
-    "lint:js": "cd ../.. && eslint --config src/trivia-frontend/eslint.config.mjs \"src/trivia-frontend/src/**/*.{js,ts}\" \"tests/trivia-frontend/**/*.ts\"",
+    "lint:js": "eslint \"src/**/*.{js,ts}\" \"test/**/*.{js,ts}\"",
     "lint:css": "stylelint \"src/**/*.css\"",
     "lint": "npm run lint:js && npm run lint:css",
     "pretest": "npm run lint",
@@ -57,19 +57,12 @@
     "test": "jest"
   },
   "jest": {
-    "roots": [
-      "<rootDir>/src",
-      "<rootDir>/../../tests/trivia-frontend"
-    ],
     "testMatch": [
-      "**/*.spec.ts"
-    ],
-    "modulePaths": [
-      "<rootDir>/node_modules"
+      "<rootDir>/test/**/*.spec.ts"
     ],
     "testEnvironment": "jsdom",
     "setupFilesAfterEnv": [
-      "<rootDir>/../../tests/trivia-frontend/setup.ts"
+      "<rootDir>/test/setup.ts"
     ],
     "transform": {
       "\\.(css|sass|scss|styl|jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "jest-transform-stub",

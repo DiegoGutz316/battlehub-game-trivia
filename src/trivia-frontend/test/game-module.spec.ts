@@ -1,10 +1,10 @@
 // Pruebas del ciclo de vida del contrato GameModule (ADR-003 y 03-contratos-tecnicos.md §6).
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
-import { GameModule } from '../../src/trivia-frontend/src/game-module';
-import type { GameContext } from '../../src/trivia-frontend/src/contracts/game-contracts';
+import { GameModule } from '../src/game-module';
+import type { GameContext } from '../src/contracts/game-contracts';
 
-jest.mock('../../src/trivia-frontend/src/services/trivia-hub/signalr-trivia-client', () => ({
+jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({
   SignalRTriviaClient: jest.fn(() => ({
     connect: jest.fn(async () => undefined),
     disconnect: jest.fn(async () => undefined),
