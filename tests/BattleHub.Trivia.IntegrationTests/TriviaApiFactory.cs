@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Data.Context;
+using BattleHub.Trivia.Data.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -173,14 +174,9 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
 
         await db.Database.MigrateAsync();
 
-        using var stream = typeof(Program)
-            .Assembly
-            .GetManifestResourceStream("QuestionBank.sql")!;
-
-        using var reader = new StreamReader(stream);
-
-        await db.Database.ExecuteSqlRawAsync(
-            await reader.ReadToEndAsync());
+        await scope.ServiceProvider
+            .GetRequiredService<QuestionSeeder>()
+            .SeedAsync();
     }
 
     async Task IAsyncLifetime.DisposeAsync()
