@@ -39,6 +39,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<TriviaScoringService>();
 builder.Services.AddSingleton<TriviaGameService>();
 builder.Services.AddSingleton<TriviaSessions>();
+builder.Services.AddSingleton<PracticeSessions>();
+builder.Services.AddHostedService<PracticeWorker>();
 builder.Services.AddSingleton<IMatchmakingTokenProvider, ConfiguredMatchmakingTokenProvider>();
 
 builder.Services.AddHttpClient(
@@ -96,6 +98,9 @@ app.MapControllers();
 app.MapHub<TriviaHub>(
     "/hubs/trivia",
     options => options.CloseOnAuthenticationExpiration = true);
+
+app.MapHub<PracticeHub>("/hubs/trivia/practice")
+    .AllowAnonymous();
 
 app.MapHealthChecks("/health").AllowAnonymous();
 
