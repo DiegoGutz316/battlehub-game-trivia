@@ -1,5 +1,6 @@
 using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Data.Context;
+using BattleHub.Trivia.Data.Repositories;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ public sealed class FinishWorkerTests(TriviaApiFactory factory)
     private sealed class Gateway(string target, FinishOutcome outcome) : IMatchmakingGateway
     {
         public int Calls;
-        public Task<MatchRoom> ValidateAsync(string id, string user, string token, CancellationToken ct) => throw new NotSupportedException();
+        public Task<MatchRoom> ValidateAsync(string id, string user, CancellationToken ct) => throw new NotSupportedException();
         public Task<FinishOutcome> FinishAsync(string id, CancellationToken ct)
         {
             if (id == target) { Calls++; return Task.FromResult(outcome); }
@@ -47,6 +48,21 @@ public sealed class FinishWorkerTests(TriviaApiFactory factory)
         for (var i = 0; i < 6; i++) await restored.DispatchAsync(default);
         Assert.Equal(blocked ? 0 : 1, restoredGateway.Calls);
         Assert.Equal(!blocked, (await db.FinishNotifications.AsNoTracking().SingleAsync(item => item.MatchId == id)).Delivered);
+    }
+
+    [Fact]
+    public async Task SavedResultCreatesDurableNotificationInSameDatabase()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TriviaDbContext>();
+        var id = "outbox-" + Guid.NewGuid().ToString("N");
+        await new ResultRepository(db).SaveAsync(new MatchResult {
+            MatchId = id, StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1), FinishedAt = DateTimeOffset.UtcNow,
+            Players = [new PlayerResult { UserId = "auth0|player", DisplayName = "Jugador", Position = 1 }], WinnerUserId = "auth0|player"
+        });
+        var pending = await db.FinishNotifications.AsNoTracking().SingleAsync(item => item.MatchId == id);
+        Assert.False(pending.Delivered);
+        Assert.Equal(0, pending.Attempts);
     }
 
     private FinishWorker CreateWorker(IMatchmakingGateway gateway) => new(factory.Services.GetRequiredService<IServiceScopeFactory>(),

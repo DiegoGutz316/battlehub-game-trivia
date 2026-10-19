@@ -165,7 +165,7 @@ Ningún valor sensible (contraseñas, Client Secret, tokens, API keys) se escrib
 |---|---|---|---|
 | `ConnectionStrings:Trivia` | `ConnectionStrings__Trivia` | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno |
 | `Matchmaking:Auth0:ClientSecret` | `Matchmaking__Auth0__ClientSecret` | **Sí** | Local: user-secrets. Docker o servidor: variable de entorno |
-| `Auth:Domain`, `Auth:Audience`, `Matchmaking:Auth0:Domain`, `Matchmaking:Auth0:Audience`, `Matchmaking:Auth0:ClientId` | `Auth__Domain`, etc. | No: identificadores públicos de Auth0 | `appsettings.json` |
+| `Matchmaking:Auth0:Domain`, `Matchmaking:Auth0:Audience`, `Matchmaking:Auth0:ClientId` | `Matchmaking__Auth0__Domain`, etc. | No: identificadores públicos de Auth0 | `appsettings.json` |
 | `Matchmaking:BaseUrl`, `Cors:Origins`, `Database:MigrateOnStartup`, `Database:SeedQuestions` | `Matchmaking__BaseUrl`, `Cors__Origins__0`, etc. | No | `appsettings.json`; se reemplazan por variable de entorno según el ambiente |
 | `TRIVIA_API_URL` (frontend) | `TRIVIA_API_URL` | No | Variable de entorno antes de `npm start` o `npm run build` |
 

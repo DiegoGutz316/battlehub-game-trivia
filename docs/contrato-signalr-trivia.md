@@ -21,9 +21,9 @@ Este documento define la comunicación en tiempo real entre el cliente y el serv
 
 ## Identidad del jugador
 
-La implementación de integración local obtiene `userId` del claim `sub` del JWT autenticado, con la audiencia `https://api.battlehub.local/trivia`. El nombre visible proviene del participante devuelto por Matchmaking. No acepta `devUserId` ni `devDisplayName` por URL, tampoco en desarrollo.
+El juego no usa Auth0 ni recibe tokens del Shell: el contexto es el del contrato central (`matchId`, `gameType`, `currentUser`). La conexión al hub no lleva token y el cliente se une con `JoinMatch({ matchId, userId })`, donde `userId` es `currentUser.id`. Una conexión queda ligada al primer `userId` aceptado y no puede cambiarlo después.
 
-Antes de `JoinMatch` se valida el detalle de la sala en Matchmaking. La extensión local propuesta es `JoinMatch({ matchId, matchmakingAccessToken })`: el segundo valor es un token de usuario para la audiencia Profile/Matchmaking, obtenido del Shell con `getMatchmakingAccessToken()`. El token que autentica el hub sigue siendo el de Trivia. Ambos proveedores de contexto son extensiones propuestas, no cambios aprobados del contrato central.
+Antes de aceptar `JoinMatch` el backend consulta el detalle de la sala en Matchmaking (`GET /api/matches/{matchId}`, sin token de usuario) y comprueba que la sala es `trivia`, está `Started` y que `userId` figura entre sus participantes. El nombre visible proviene del participante devuelto por Matchmaking.
 
 Los callbacks a Matchmaking usan un tercer flujo: token M2M del backend, con `matches.finish`. El navegador no recibe el Client Secret. Ver [guía de integración](integracion-shell-auth0.md).
 

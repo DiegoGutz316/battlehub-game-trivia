@@ -5,6 +5,7 @@ using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Domain.Interfaces;
 using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,20 +17,20 @@ namespace BattleHub.Trivia.IntegrationTests;
 public sealed class LiveHubTests(TriviaApiFactory factory)
 {
     [Fact]
-    public async Task TwoAuthenticatedClientsPlayTenRoundsPersistAndNotifyMatchmaking()
+    public async Task TwoClientsPlayTenRoundsPersistAndNotifyMatchmaking()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var ct = timeout.Token;
         var id = "live-" + Guid.NewGuid().ToString("N");
-        await using var one = Connection("auth0|one");
-        await using var two = Connection("auth0|two");
+        await using var one = Connection();
+        await using var two = Connection();
         var questions = Channel.CreateUnbounded<JsonElement>();
         var finished = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         one.On<JsonElement>("QuestionStarted", data => { questions.Writer.TryWrite(data); });
         one.On<JsonElement>("GameFinished", data => { finished.TrySetResult(data); });
         await one.StartAsync(ct); await two.StartAsync(ct);
-        await one.InvokeAsync("JoinMatch", new JoinRequest(id, "room-token"), ct);
-        await two.InvokeAsync("JoinMatch", new JoinRequest(id, "room-token"), ct);
+        await one.InvokeAsync("JoinMatch", new JoinRequest(id, "auth0|one"), ct);
+        await two.InvokeAsync("JoinMatch", new JoinRequest(id, "auth0|two"), ct);
         using var scope = factory.Services.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IQuestionRepository>();
         var sessions = factory.Services.GetRequiredService<TriviaSessions>();
@@ -60,10 +61,24 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
         Assert.True((await db.FinishNotifications.AsNoTracking().SingleAsync(p => p.MatchId == id, ct)).Delivered);
     }
 
-    private HubConnection Connection(string user) => new HubConnectionBuilder().WithUrl("http://localhost/hubs/trivia", options =>
+    [Fact]
+    public async Task JoinRejectsNonParticipantAndIdentityChange()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var ct = timeout.Token;
+        var id = "join-" + Guid.NewGuid().ToString("N");
+        await using var intruder = Connection();
+        await using var player = Connection();
+        await intruder.StartAsync(ct); await player.StartAsync(ct);
+        await Assert.ThrowsAsync<HubException>(() => intruder.InvokeAsync("JoinMatch", new JoinRequest(id, "auth0|intruder"), ct));
+        await Assert.ThrowsAsync<HubException>(() => intruder.InvokeAsync("JoinMatch", new JoinRequest(id, ""), ct));
+        await player.InvokeAsync("JoinMatch", new JoinRequest(id, "auth0|one"), ct);
+        await Assert.ThrowsAsync<HubException>(() => player.InvokeAsync("JoinMatch", new JoinRequest(id, "auth0|two"), ct));
+    }
+
+    private HubConnection Connection() => new HubConnectionBuilder().WithUrl("http://localhost/hubs/trivia", options =>
     {
         options.Transports = HttpTransportType.LongPolling;
         options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
-        options.AccessTokenProvider = () => Task.FromResult<string?>(factory.Token(user, writer: false));
     }).Build();
 }

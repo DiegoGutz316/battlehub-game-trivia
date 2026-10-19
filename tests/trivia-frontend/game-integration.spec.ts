@@ -3,6 +3,7 @@ import type { GameContext } from '../../src/trivia-frontend/src/contracts/game-c
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
 import type { TriviaHubEventMap, TriviaHubEventName } from '../../src/trivia-frontend/src/services/trivia-hub/contract';
+import { SignalRTriviaClient } from '../../src/trivia-frontend/src/services/trivia-hub/signalr-trivia-client';
 
 const mockHandlers = new Map<string, (data: never) => void>();
 let mockStateHandler: (state: string) => void;
@@ -15,8 +16,7 @@ const mockClient = {
   onConnectionStateChanged: jest.fn((handler: (state: string) => void) => { mockStateHandler = handler; return () => undefined; }),
 };
 jest.mock('../../src/trivia-frontend/src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn(() => mockClient) }));
-const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'auth0|one', displayName: 'Uno' },
-  getAccessToken: jest.fn(async () => 'trivia-token'), getMatchmakingAccessToken: jest.fn(async () => 'room-token') };
+const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'auth0|one', displayName: 'Uno' } };
 function emit<E extends TriviaHubEventName>(event: E, data: TriviaHubEventMap[E]): void { mockHandlers.get(event)?.(data as never); }
 
 beforeEach(() => { jest.clearAllMocks(); mockHandlers.clear(); });
@@ -42,7 +42,7 @@ it('renders the question, answer lock and final scoreboard in Aurelia', async ()
     expect(fixture.appHost.textContent).toContain('2200 puntos');
   } finally { await game.dispose(); await fixture.stop(true); }
 });
-it('fetches current user history and statistics with a Trivia token', async () => {
+it('fetches current user history and statistics without an access token', async () => {
   const game = new GameModule(); await game.initialize(ctx);
   const fetchMock = jest.fn().mockResolvedValueOnce({ ok: true, json: async () => [{ matchId: 'match', players: [{ userId: 'auth0|one', score: 2200, position: 1 }] }] })
     .mockResolvedValueOnce({ ok: true, json: async () => ({ matchesPlayed: 1, wins: 1, averageScore: 2200, bestScore: 2200 }) });
@@ -50,14 +50,16 @@ it('fetches current user history and statistics with a Trivia token', async () =
   try {
     await game.loadHistory();
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5185/api/games/trivia/players/auth0%7Cone/history');
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer trivia-token');
+    expect(fetchMock.mock.calls[0][1].headers).toBeUndefined();
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:5185/api/games/trivia/players/auth0%7Cone/stats');
     expect(game.statistics?.wins).toBe(1); expect(game.myScore(game.history[0])).toBe(2200);
   } finally { globalThis.fetch = previous; await game.dispose(); }
 });
 
-it('joins with the room token, locks confirmed answers and shows server result', async () => {
+it('connects without a token, joins as the current user, locks confirmed answers and shows server result', async () => {
   const game = new GameModule(); await game.initialize(ctx); await game.start();
-  expect(mockClient.joinMatch).toHaveBeenCalledWith({ matchId: 'match', matchmakingAccessToken: 'room-token' });
+  expect(SignalRTriviaClient).toHaveBeenCalledWith('http://localhost:5185');
+  expect(mockClient.joinMatch).toHaveBeenCalledWith({ matchId: 'match', userId: 'auth0|one' });
   const now = new Date().toISOString();
   emit('QuestionStarted', { questionId: 'q1', questionNumber: 1, totalQuestions: 10, text: 'Pregunta', category: 'General', options: [{ answerId: 'a', text: 'A' }], serverTimeUtc: now, expiresAtUtc: new Date(Date.now() + 15000).toISOString() });
   await game.answer('a'); expect(mockClient.submitAnswer).toHaveBeenCalledTimes(1);
@@ -68,16 +70,13 @@ it('joins with the room token, locks confirmed answers and shows server result',
   emit('GameFinished', { matchId: 'match', players: [], winnerUserId: 'auth0|one', isTie: false, decidedByTiebreak: false, finishedAtUtc: now });
   expect(game.phase).toBe('finished'); await game.dispose(); expect(mockClient.disconnect).toHaveBeenCalled();
 });
-it('gets a fresh room token and snapshot after reconnecting', async () => {
+it('joins again to get a fresh snapshot after reconnecting', async () => {
   const game = new GameModule(); await game.initialize(ctx); await game.start();
   mockStateHandler('reconnecting'); mockStateHandler('connected');
   await Promise.resolve(); await Promise.resolve();
-  expect(ctx.getMatchmakingAccessToken).toHaveBeenCalledTimes(2);
   expect(mockClient.joinMatch).toHaveBeenCalledTimes(2);
+  expect(mockClient.joinMatch).toHaveBeenLastCalledWith({ matchId: 'match', userId: 'auth0|one' });
   await game.dispose();
-});
-it('refuses partially configured authorization', async () => {
-  await expect(new GameModule().initialize({ ...ctx, getMatchmakingAccessToken: undefined })).rejects.toThrow('autorización');
 });
 it('unsubscribes and clears the countdown after disposal', async () => {
   jest.useFakeTimers();

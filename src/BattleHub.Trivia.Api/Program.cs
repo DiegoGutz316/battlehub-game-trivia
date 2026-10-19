@@ -1,7 +1,6 @@
 using BattleHub.Trivia.Data;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Domain.Services;
-using BattleHub.Trivia.Api.Auth;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Api.Matchmaking;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +11,6 @@ builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
 builder.Services.AddProblemDetails();
 builder.Services.AddTriviaData(builder.Configuration);
-builder.Services.AddTriviaAuth(builder.Configuration);
 builder.Services.AddSignalR(options => { options.EnableDetailedErrors = false; options.MaximumReceiveMessageSize = 32768; });
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
     .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:4000", "http://localhost:4002"])
@@ -46,10 +44,8 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseExceptionHandler();
 app.UseCors();
-app.UseAuthentication();
-app.UseAuthorization();
 app.MapControllers();
-app.MapHub<TriviaHub>("/hubs/trivia", options => options.CloseOnAuthenticationExpiration = true);
-app.MapHealthChecks("/health").AllowAnonymous();
+app.MapHub<TriviaHub>("/hubs/trivia");
+app.MapHealthChecks("/health");
 app.Run();
 public partial class Program;

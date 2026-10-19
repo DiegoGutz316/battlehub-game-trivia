@@ -19,17 +19,25 @@ public sealed class MatchmakingGatewayTests
         ["Matchmaking:Auth0:ClientSecret"] = "test-only-not-a-real-secret"
     }).Build();
     [Fact]
-    public async Task ForwardsRoomTokenAndRejectsNonParticipant()
+    public async Task ReadsRoomWithoutUserTokenAndRejectsNonParticipant()
     {
         using var http = new HttpClient(new Handler(request => {
-            Assert.Equal("Bearer", request.Headers.Authorization!.Scheme);
-            Assert.Equal("room-token", request.Headers.Authorization.Parameter);
+            Assert.Null(request.Headers.Authorization);
             Assert.Equal("/api/matches/room", request.RequestUri!.AbsolutePath);
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new MatchRoom("room", "trivia", "Started", [new("auth0|one", "Uno")])) };
         }));
         var gateway = new MatchmakingGateway(http, Config, TimeProvider.System, NullLogger<MatchmakingGateway>.Instance);
-        Assert.Equal("room", (await gateway.ValidateAsync("room", "auth0|one", "room-token", default)).Id);
-        await Assert.ThrowsAsync<HubException>(() => gateway.ValidateAsync("room", "auth0|intruder", "room-token", default));
+        Assert.Equal("room", (await gateway.ValidateAsync("room", "auth0|one", default)).Id);
+        await Assert.ThrowsAsync<HubException>(() => gateway.ValidateAsync("room", "auth0|intruder", default));
+    }
+    [Theory]
+    [InlineData("")]
+    [InlineData("a-very-long-match-identifier-that-exceeds-the-sixty-four-character-limit")]
+    public async Task RejectsInvalidMatchIdWithoutCallingMatchmaking(string matchId)
+    {
+        using var http = new HttpClient(new Handler(_ => throw new InvalidOperationException("No debe llamar a Matchmaking.")));
+        var gateway = new MatchmakingGateway(http, Config, TimeProvider.System, NullLogger<MatchmakingGateway>.Instance);
+        await Assert.ThrowsAsync<HubException>(() => gateway.ValidateAsync(matchId, "auth0|one", default));
     }
     [Theory]
     [InlineData("typing", "Started")]
@@ -39,7 +47,7 @@ public sealed class MatchmakingGatewayTests
     {
         using var http = new HttpClient(new Handler(_ => new(HttpStatusCode.OK) { Content = JsonContent.Create(new MatchRoom("room", game, status, [new("auth0|one", "Uno")])) }));
         var gateway = new MatchmakingGateway(http, Config, TimeProvider.System, NullLogger<MatchmakingGateway>.Instance);
-        await Assert.ThrowsAsync<HubException>(() => gateway.ValidateAsync("room", "auth0|one", "room-token", default));
+        await Assert.ThrowsAsync<HubException>(() => gateway.ValidateAsync("room", "auth0|one", default));
     }
     [Theory]
     [InlineData(204, FinishOutcome.Confirmed)]

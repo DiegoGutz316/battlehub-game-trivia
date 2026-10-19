@@ -3,8 +3,6 @@ export interface GameContext {
   matchId: string;
   gameType: 'typing' | 'trivia' | 'memory';
   currentUser: { id: string; displayName: string };
-  getAccessToken?: () => Promise<string>;
-  getMatchmakingAccessToken?: () => Promise<string>;
 }
 
 export interface GameModule {

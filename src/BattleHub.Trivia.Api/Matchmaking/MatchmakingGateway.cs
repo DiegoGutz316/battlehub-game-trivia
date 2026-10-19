@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using BattleHub.Trivia.Api.Auth;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BattleHub.Trivia.Api.Matchmaking;
@@ -11,7 +10,7 @@ public sealed record MatchRoom(string Id, string GameType, string Status, RoomPl
 public enum FinishOutcome { Confirmed, Pending, Rejected }
 public interface IMatchmakingGateway
 {
-    Task<MatchRoom> ValidateAsync(string matchId, string userId, string token, CancellationToken ct);
+    Task<MatchRoom> ValidateAsync(string matchId, string userId, CancellationToken ct);
     Task<FinishOutcome> FinishAsync(string matchId, CancellationToken ct);
 }
 
@@ -27,12 +26,10 @@ public sealed class MatchmakingGateway(HttpClient http, IConfiguration config, T
             throw new InvalidOperationException("Configurar Matchmaking:BaseUrl.");
         return new Uri(uri.AbsoluteUri.TrimEnd('/') + path);
     }
-    public async Task<MatchRoom> ValidateAsync(string matchId, string userId, string token, CancellationToken ct)
+    public async Task<MatchRoom> ValidateAsync(string matchId, string userId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(matchId) || matchId.Length > 64 || string.IsNullOrWhiteSpace(token) || token.Length > 16000)
-            throw new HubException("UNAUTHORIZED");
+        if (string.IsNullOrWhiteSpace(matchId) || matchId.Length > 64) throw new HubException("MATCH_NOT_FOUND");
         using var request = new HttpRequestMessage(HttpMethod.Get, Url("/api/matches/" + Uri.EscapeDataString(matchId)));
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode) throw new HubException("MATCH_NOT_FOUND");
         var room = await response.Content.ReadFromJsonAsync<MatchRoom>(cancellationToken: ct);

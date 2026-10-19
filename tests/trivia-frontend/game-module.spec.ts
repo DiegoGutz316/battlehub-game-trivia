@@ -4,6 +4,17 @@ import { tasksSettled } from '@aurelia/runtime';
 import { GameModule } from '../../src/trivia-frontend/src/game-module';
 import type { GameContext } from '../../src/trivia-frontend/src/contracts/game-contracts';
 
+jest.mock('../../src/trivia-frontend/src/services/trivia-hub/signalr-trivia-client', () => ({
+  SignalRTriviaClient: jest.fn(() => ({
+    connect: jest.fn(async () => undefined),
+    disconnect: jest.fn(async () => undefined),
+    joinMatch: jest.fn(async () => undefined),
+    submitAnswer: jest.fn(async () => undefined),
+    on: jest.fn(() => () => undefined),
+    onConnectionStateChanged: jest.fn(() => () => undefined),
+  })),
+}));
+
 const ctx: GameContext = {
   matchId: 'match-001',
   gameType: 'trivia',

@@ -4,14 +4,14 @@ Actualizada contra `DiegoGutz316/battlehub-game-trivia`, `main`, commit `58b2732
 
 ## Qué se implementó
 
-- JWT RS256 para API y `/hubs/trivia`, audiencia exclusiva de jugadores `https://api.battlehub.local/trivia`, identidad desde `sub`.
+- La API y `/hubs/trivia` no usan Auth0 ni tokens de jugador; la identidad es `currentUser.id` del contexto del Shell, enviada en `JoinMatch`.
 - Cliente SignalR real y pantalla de preguntas, opciones, temporizador, marcador, revisión, ganador, historial y estadísticas.
 - Diez preguntas del banco SQL existente; cuatro opciones; quince segundos por pregunta; cinco segundos de revisión. El servidor calcula puntos y desempates. El máximo de 240 puntos también se respeta en respuestas instantáneas.
 - Validación de sala `Started`, `gameType: trivia` y participantes contra Matchmaking antes de entrar al grupo. No se acepta identidad por parámetros `devUserId`/`devDisplayName`.
 - Reconexión durante una partida, respuestas únicas, cierre por tiempo y conservación del marcador de desconectados. Se espera a todos los participantes para la primera pregunta, con diez segundos de gracia como máximo después del primer ingreso validado.
 - Resultado y aviso pendiente guardados en la misma transacción de EF. Una cola SQL avisa al backend de Matchmaking mediante M2M, sin bloquear los temporizadores.
 - Reintentos transitorios: hasta tres solicitudes por despacho ante 408, 429, 5xx o fallos de red; próximo despacho treinta segundos después. Otros rechazos quedan `Blocked` para corregir configuración y revisar manualmente. Los avisos pendientes sobreviven al reinicio del backend.
-- CORS para Shell 4000 y arnés 4002; resultados legibles solo para participantes; historial/estadísticas propios.
+- CORS para Shell 4000 y arnés 4002.
 
 ## Configuración pública
 
@@ -83,27 +83,25 @@ $env:TRIVIA_API_URL='http://localhost:5185'
 npm.cmd start
 ```
 
-Abrir el juego desde una sala real del Shell. Abrir 4002 directamente muestra un arnés de vista previa y no simula una partida autenticada.
+Abrir el juego desde una sala real del Shell. Abrir 4002 directamente carga el arnés de desarrollo, que se conecta al hub con el contexto simulado; la partida solo arranca si Matchmaking tiene una sala `Started` con ese `matchId` y jugador.
 
-## Extensión local del contexto
+## Contexto del juego
 
 ```typescript
 interface GameContext {
   matchId: string;
   gameType: 'trivia';
   currentUser: { id: string; displayName: string };
-  getAccessToken?: () => Promise<string>;
-  getMatchmakingAccessToken?: () => Promise<string>;
 }
 ```
 
-`getAccessToken()` entrega un token de usuario con audiencia Trivia; se usa en REST y `accessTokenFactory` de SignalR. `getMatchmakingAccessToken()` entrega un token de usuario con audiencia Profile/Matchmaking; se envía en `JoinMatch({ matchId, matchmakingAccessToken })`. El backend lo reenvía al GET del detalle y comprueba que `sub` del token de Trivia figura como participante. No guarda ese token ni lo cambia por el M2M. El backend nunca reenvía tokens de usuario a la URL de un cliente: usa únicamente `Matchmaking:BaseUrl` configurada.
+Es el contexto del contrato central, sin tokens. El frontend se conecta a SignalR y a la API REST sin `Authorization` y se une con `JoinMatch({ matchId, userId: currentUser.id })`. El backend consulta el GET del detalle en `Matchmaking:BaseUrl` y comprueba que `userId` figura como participante.
 
-El Shell incluye estas funciones y las rechaza al cerrar el juego o cambiar sesión. Son extensiones propuestas del contexto central. El frontend de Trivia rechaza contextos parcialmente configurados. `pause()` pausa los controles de esta vista; no detiene la partida compartida. `dispose()` elimina suscripciones, temporizador y conexión.
+`pause()` pausa los controles de esta vista; no detiene la partida compartida. `dispose()` elimina suscripciones, temporizador y conexión.
 
 ## Equipo 2: configuración necesaria
 
-Su GET `/api/matches/{id}` debe devolver `id`, `gameType`, `status` y `participants: [{ userId, displayName }]`, como en la copia local preparada previamente. Debe aceptar el token de usuario de la audiencia Profile/Matchmaking.
+Su GET `/api/matches/{id}` debe devolver `id`, `gameType`, `status` y `participants: [{ userId, displayName }]`, como en la copia local preparada previamente. Trivia lo llama sin token de usuario, así que debe permitir la consulta desde el backend de Trivia.
 
 Agregar **sin borrar los clientes existentes de Typing y Memory** en `src/BattleHub.Matchmaking.Api/appsettings.json`:
 

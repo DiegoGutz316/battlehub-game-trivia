@@ -4,10 +4,9 @@
       <div><p class="trivia-game-eyebrow">BATTLEHUB · TRIVIA</p><h1>Trivia Battle</h1></div>
       <div><span data-testid="player-name">${context.currentUser.displayName}</span><small data-testid="match-id">${context.matchId}</small><small data-testid="game-state">${state}</small></div>
     </header>
-    <p if.bind="preview" class="trivia-game-notice">Vista previa. Para jugar una partida real, abre Trivia desde las salas del Shell.</p>
     <p if.bind="error" class="trivia-game-error" role="alert">${error}</p>
     <p if.bind="state === 'paused'" class="trivia-game-notice">La vista está pausada. La partida compartida continúa en el servidor.</p>
-    <p if.bind="!preview && connection !== 'connected'" class="trivia-game-notice" aria-live="polite">Conexión: ${connection}. Las respuestas se habilitarán cuando estés conectado.</p>
+    <p if.bind="state !== 'initialized' && connection !== 'connected'" class="trivia-game-notice" aria-live="polite">Conexión: ${connection}. Las respuestas se habilitarán cuando estés conectado.</p>
     <div class="trivia-game-layout">
       <main class="trivia-game-panel">
         <div if.bind="phase === 'waiting'"><h2>Preparando la partida</h2><p>Esperamos a los jugadores. Diez preguntas, cuatro opciones y quince segundos para responder.</p></div>
