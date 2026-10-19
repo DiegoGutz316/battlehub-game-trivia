@@ -92,6 +92,31 @@ jobs:
       - name: Coverage threshold
         run: node ../../.github/scripts/coverage.mjs check frontend coverage/coverage-summary.json
 
+  frontend-docker:
+    name: frontend-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build --tag battlehub-trivia-frontend:ci src/trivia-frontend
+
+      - name: Smoke test
+        run: |
+          docker run --detach --name trivia-frontend --publish 4002:8080 battlehub-trivia-frontend:ci
+          for attempt in $(seq 1 15); do
+            curl --fail --silent --output /dev/null http://localhost:4002/remoteEntry.js && break
+            sleep 1
+          done
+          curl --fail --silent --show-error --head http://localhost:4002/remoteEntry.js | tee headers.txt
+          grep --ignore-case "^access-control-allow-origin: \*" headers.txt
+          curl --fail --silent --show-error http://localhost:4002/ | grep --quiet "<html"
+          docker image ls battlehub-trivia-frontend:ci --format "Imagen del frontend: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Container logs
+        if: failure()
+        run: docker logs trivia-frontend || true
+
   coverage-comment:
     name: coverage-comment
     # Comenta también cuando la cobertura hace fallar backend o frontend.

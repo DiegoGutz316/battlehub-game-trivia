@@ -93,6 +93,21 @@ npm run build    # build de producción en dist/ (genera dist/remoteEntry.js)
 npm test         # lint + pruebas unitarias con Jest
 ```
 
+#### Docker
+
+`src/trivia-frontend/Dockerfile` tiene dos etapas: compila con Node 24 Alpine y copia solo `dist/` a nginx sin root (`nginx-unprivileged`, variante `alpine-slim`), que escucha en el puerto 8080. Desde la raíz del repositorio:
+
+```bash
+docker build -t battlehub-trivia-frontend src/trivia-frontend
+docker run --rm -p 4002:8080 battlehub-trivia-frontend
+```
+
+El juego queda en `http://localhost:4002` y el Shell lo carga desde `http://localhost:4002/remoteEntry.js`, igual que con `npm start`. nginx agrega el encabezado CORS que pide el ADR-003 y evita que el navegador guarde una versión vieja de `remoteEntry.js`.
+
+La URL de la API queda escrita en el bundle al compilar, así que se cambia al construir la imagen: `docker build --build-arg TRIVIA_API_URL=https://api.ejemplo.com -t battlehub-trivia-frontend src/trivia-frontend`.
+
+El job `frontend-docker` del CI construye la imagen en cada pull request, la levanta y comprueba que sirva `remoteEntry.js` con CORS.
+
 #### Modo desarrollo (sin Shell)
 
 `npm start` abre un arnés que simula lo que hace el Shell: llama a `initialize()` con un contexto de prueba y tiene botones para `start()`, `pause()` y `dispose()`. Si el juego rechaza una llamada, muestra el error como lo haría el Shell (`LIFECYCLE_ERROR`).
