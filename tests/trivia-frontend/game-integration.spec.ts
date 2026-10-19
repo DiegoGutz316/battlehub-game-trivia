@@ -1,4 +1,4 @@
-﻿import { GameModule } from '../../src/trivia-frontend/src/game-module';
+import { GameModule } from '../../src/trivia-frontend/src/game-module';
 import type { GameContext } from '../../src/trivia-frontend/src/contracts/game-contracts';
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
@@ -15,7 +15,7 @@ const mockClient = {
   onConnectionStateChanged: jest.fn((handler: (state: string) => void) => { mockStateHandler = handler; return () => undefined; }),
 };
 jest.mock('../../src/trivia-frontend/src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn(() => mockClient) }));
-const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'auth0|one', displayName: 'Uno' },
+const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'player-one', displayName: 'Uno' },
   getAccessToken: jest.fn(async () => 'trivia-token'), getMatchmakingAccessToken: jest.fn(async () => 'room-token') };
 function emit<E extends TriviaHubEventName>(event: E, data: TriviaHubEventMap[E]): void { mockHandlers.get(event)?.(data as never); }
 
@@ -36,7 +36,7 @@ it('renders the question, answer lock and final scoreboard in Aurelia', async ()
     expect(button.disabled).toBe(false);
     emit('AnswerReceived', { questionId: 'q1', answerId: 'a', receivedAtUtc: now }); await tasksSettled();
     expect(button.disabled).toBe(true);
-    emit('GameFinished', { matchId: 'match', players: [{ userId: 'auth0|one', displayName: 'Uno', score: 2200, correctAnswers: 10, correctAnswersTimeMs: 30000, position: 1 }], winnerUserId: 'auth0|one', isTie: false, decidedByTiebreak: false, finishedAtUtc: now });
+    emit('GameFinished', { matchId: 'match', players: [{ userId: 'player-one', displayName: 'Uno', score: 2200, correctAnswers: 10, correctAnswersTimeMs: 30000, position: 1 }], winnerUserId: 'player-one', isTie: false, decidedByTiebreak: false, finishedAtUtc: now });
     await tasksSettled();
     expect(fixture.appHost.textContent).toContain('¡Ganaste!');
     expect(fixture.appHost.textContent).toContain('2200 puntos');
@@ -44,12 +44,12 @@ it('renders the question, answer lock and final scoreboard in Aurelia', async ()
 });
 it('fetches current user history and statistics with a Trivia token', async () => {
   const game = new GameModule(); await game.initialize(ctx);
-  const fetchMock = jest.fn().mockResolvedValueOnce({ ok: true, json: async () => [{ matchId: 'match', players: [{ userId: 'auth0|one', score: 2200, position: 1 }] }] })
+  const fetchMock = jest.fn().mockResolvedValueOnce({ ok: true, json: async () => [{ matchId: 'match', players: [{ userId: 'player-one', score: 2200, position: 1 }] }] })
     .mockResolvedValueOnce({ ok: true, json: async () => ({ matchesPlayed: 1, wins: 1, averageScore: 2200, bestScore: 2200 }) });
   const previous = globalThis.fetch; globalThis.fetch = fetchMock;
   try {
     await game.loadHistory();
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5185/api/games/trivia/players/auth0%7Cone/history');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5185/api/games/trivia/players/player-one/history');
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer trivia-token');
     expect(game.statistics?.wins).toBe(1); expect(game.myScore(game.history[0])).toBe(2200);
   } finally { globalThis.fetch = previous; await game.dispose(); }
@@ -65,7 +65,7 @@ it('joins with the room token, locks confirmed answers and shows server result',
   await game.answer('a'); expect(mockClient.submitAnswer).toHaveBeenCalledTimes(1);
   emit('QuestionClosed', { questionId: 'q1', correctAnswerId: 'a', selectedAnswerId: 'a', isCorrect: true, pointsEarned: 220, totalScore: 220, nextQuestionAtUtc: now, serverTimeUtc: now });
   expect(game.review?.pointsEarned).toBe(220); expect(game.phase).toBe('reviewing');
-  emit('GameFinished', { matchId: 'match', players: [], winnerUserId: 'auth0|one', isTie: false, decidedByTiebreak: false, finishedAtUtc: now });
+  emit('GameFinished', { matchId: 'match', players: [], winnerUserId: 'player-one', isTie: false, decidedByTiebreak: false, finishedAtUtc: now });
   expect(game.phase).toBe('finished'); await game.dispose(); expect(mockClient.disconnect).toHaveBeenCalled();
 });
 it('gets a fresh room token and snapshot after reconnecting', async () => {

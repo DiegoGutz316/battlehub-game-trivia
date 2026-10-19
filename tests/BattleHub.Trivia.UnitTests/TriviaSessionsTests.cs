@@ -1,4 +1,4 @@
-﻿
+
 using System.Text.Json;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Api.Matchmaking;
@@ -173,19 +173,19 @@ public sealed class TriviaSessionsTests
             "trivia",
             "Started",
             [
-                new("auth0|one", "Uno"),
-                new("auth0|two", "Dos")
+                new("player-one", "Uno"),
+                new("player-two", "Dos")
             ]
         );
 
-        await sessions.JoinAsync(room, "auth0|one", "c1", default);
+        await sessions.JoinAsync(room, "player-one", "c1", default);
 
         Assert.DoesNotContain(
             messages,
             m => m.Name == "QuestionStarted"
         );
 
-        await sessions.JoinAsync(room, "auth0|two", "c2", default);
+        await sessions.JoinAsync(room, "player-two", "c2", default);
 
         for (var i = 1; i <= 10; i++)
         {
@@ -205,7 +205,7 @@ public sealed class TriviaSessionsTests
             await Assert.ThrowsAsync<HubException>(() =>
                 sessions.AnswerAsync(
                     new("match", "q" + i, "a"),
-                    "auth0|one",
+                    "player-one",
                     "intruder",
                     default
                 )
@@ -215,7 +215,7 @@ public sealed class TriviaSessionsTests
 
             await sessions.AnswerAsync(
                 new("match", "q" + i, "a"),
-                "auth0|one",
+                "player-one",
                 "c1",
                 default
             );
@@ -223,7 +223,7 @@ public sealed class TriviaSessionsTests
             await Assert.ThrowsAsync<HubException>(() =>
                 sessions.AnswerAsync(
                     new("match", "q" + i, "a"),
-                    "auth0|one",
+                    "player-one",
                     "c1",
                     default
                 )
@@ -233,7 +233,7 @@ public sealed class TriviaSessionsTests
 
             await sessions.AnswerAsync(
                 new("match", "q" + i, "b"),
-                "auth0|two",
+                "player-two",
                 "c2",
                 default
             );
@@ -259,7 +259,7 @@ public sealed class TriviaSessionsTests
         }
 
         Assert.Single(saved);
-        Assert.Equal("auth0|one", saved[0].WinnerUserId);
+        Assert.Equal("player-one", saved[0].WinnerUserId);
         Assert.Equal(2200, saved[0].Players[0].Score);
         Assert.Equal(0, saved[0].Players[1].Score);
 
@@ -300,19 +300,19 @@ public sealed class TriviaSessionsTests
             "trivia",
             "Started",
             [
-                new("auth0|one", "Uno"),
-                new("auth0|two", "Dos")
+                new("player-one", "Uno"),
+                new("player-two", "Dos")
             ]
         );
 
-        await sessions.JoinAsync(room, "auth0|one", "c1", default);
-        await sessions.JoinAsync(room, "auth0|two", "c2", default);
+        await sessions.JoinAsync(room, "player-one", "c1", default);
+        await sessions.JoinAsync(room, "player-two", "c2", default);
 
         clock.Advance(2);
 
         await sessions.AnswerAsync(
             new("reconnect", "q1", "a"),
-            "auth0|one",
+            "player-one",
             "c1",
             default
         );
@@ -321,7 +321,7 @@ public sealed class TriviaSessionsTests
 
         await sessions.JoinAsync(
             room,
-            "auth0|one",
+            "player-one",
             "c3",
             default
         );
@@ -360,7 +360,7 @@ public sealed class TriviaSessionsTests
         await Assert.ThrowsAsync<HubException>(() =>
             sessions.AnswerAsync(
                 new("reconnect", "q1", "a"),
-                "auth0|two",
+                "player-two",
                 "c2",
                 default
             )

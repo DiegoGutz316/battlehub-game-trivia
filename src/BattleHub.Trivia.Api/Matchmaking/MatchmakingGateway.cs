@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using BattleHub.Trivia.Api.Auth;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BattleHub.Trivia.Api.Matchmaking;
@@ -15,11 +14,14 @@ public interface IMatchmakingGateway
     Task<FinishOutcome> FinishAsync(string matchId, CancellationToken ct);
 }
 
-public sealed class MatchmakingGateway(HttpClient http, IConfiguration config, TimeProvider clock, ILogger<MatchmakingGateway> logger) : IMatchmakingGateway
+public sealed class MatchmakingGateway(
+    HttpClient http,
+    IConfiguration config,
+    TimeProvider clock,
+    ILogger<MatchmakingGateway> logger,
+    IMatchmakingTokenProvider tokenProvider) : IMatchmakingGateway
 {
-    private readonly SemaphoreSlim gate = new(1, 1);
-    private string? machineToken;
-    private DateTimeOffset expires;
+
     private Uri Url(string path)
     {
         var origin = config["Matchmaking:BaseUrl"];
@@ -44,29 +46,7 @@ public sealed class MatchmakingGateway(HttpClient http, IConfiguration config, T
             throw new HubException("PLAYER_NOT_IN_MATCH");
         return room;
     }
-    private async Task<string> TokenAsync(CancellationToken ct)
-    {
-        await gate.WaitAsync(ct);
-        try
-        {
-            if (machineToken is not null && clock.GetUtcNow() < expires) return machineToken;
-            var domain = config["Matchmaking:Auth0:Domain"];
-            var id = config["Matchmaking:Auth0:ClientId"];
-            var secret = config["Matchmaking:Auth0:ClientSecret"];
-            var audience = config["Matchmaking:Auth0:Audience"];
-            if (string.IsNullOrWhiteSpace(domain) || domain.Contains('/') || string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(secret) || string.IsNullOrWhiteSpace(audience))
-                throw new InvalidOperationException("Configurar las credenciales M2M de Trivia para Matchmaking.");
-            using var response = await http.PostAsJsonAsync($"https://{domain}/oauth/token", new
-            { grant_type = "client_credentials", client_id = id, client_secret = secret, audience }, ct);
-            response.EnsureSuccessStatusCode();
-            var data = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct);
-            if (data is null || string.IsNullOrWhiteSpace(data.access_token) || data.expires_in <= 0) throw new InvalidOperationException("Token M2M inválido.");
-            machineToken = data.access_token;
-            expires = clock.GetUtcNow().AddSeconds(Math.Max(1, data.expires_in - 60));
-            return machineToken;
-        }
-        finally { gate.Release(); }
-    }
+
     public async Task<FinishOutcome> FinishAsync(string matchId, CancellationToken ct)
     {
         for (var attempt = 1; attempt <= 3; attempt++)
@@ -74,7 +54,7 @@ public sealed class MatchmakingGateway(HttpClient http, IConfiguration config, T
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, Url("/api/matches/" + Uri.EscapeDataString(matchId) + "/finish"));
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await TokenAsync(ct));
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokenProvider.GetTokenAsync(ct));
                 using var response = await http.SendAsync(request, ct);
                 if (response.IsSuccessStatusCode) return FinishOutcome.Confirmed;
                 if (response.StatusCode != HttpStatusCode.RequestTimeout && (int)response.StatusCode != 429 && (int)response.StatusCode < 500)
@@ -90,5 +70,4 @@ public sealed class MatchmakingGateway(HttpClient http, IConfiguration config, T
         }
         return FinishOutcome.Pending;
     }
-    private sealed record TokenResponse(string access_token, int expires_in);
 }

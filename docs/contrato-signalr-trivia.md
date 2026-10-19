@@ -21,11 +21,17 @@ Este documento define la comunicación en tiempo real entre el cliente y el serv
 
 ## Identidad del jugador
 
-La implementación de integración local obtiene `userId` del claim `sub` del JWT autenticado, con la audiencia `https://api.battlehub.local/trivia`. El nombre visible proviene del participante devuelto por Matchmaking. No acepta `devUserId` ni `devDisplayName` por URL, tampoco en desarrollo.
+Trivia Battle utiliza autenticación JWT propia, sin depender de Auth0. El backend valida tokens firmados con RS256 mediante una clave pública configurada localmente, con el emisor `battlehub-trivia` y la audiencia `battlehub-trivia-api`.
 
-Antes de `JoinMatch` se valida el detalle de la sala en Matchmaking. La extensión local propuesta es `JoinMatch({ matchId, matchmakingAccessToken })`: el segundo valor es un token de usuario para la audiencia Profile/Matchmaking, obtenido del Shell con `getMatchmakingAccessToken()`. El token que autentica el hub sigue siendo el de Trivia. Ambos proveedores de contexto son extensiones propuestas, no cambios aprobados del contrato central.
+El identificador `userId` se obtiene del claim `sub` del JWT autenticado. El nombre visible del jugador se obtiene de la información de la sala devuelta por Matchmaking. No se aceptan identificadores de usuario enviados por URL para sustituir la autenticación.
 
-Los callbacks a Matchmaking usan un tercer flujo: token M2M del backend, con `matches.finish`. El navegador no recibe el Client Secret. Ver [guía de integración](integracion-shell-auth0.md).
+Para unirse a una partida, el cliente utiliza `JoinMatch({ matchId, matchmakingAccessToken })`. El primer valor identifica la partida y el segundo permite solicitar a Matchmaking la validación del jugador y su pertenencia a la sala.
+
+El token que autentica la conexión al Hub de Trivia es independiente del token utilizado para consultar Matchmaking. La compatibilidad entre ambos servicios todavía requiere coordinación con el equipo responsable de Matchmaking.
+
+Para notificar la finalización de partidas, el backend utiliza un proveedor de tokens de servicio (`IMatchmakingTokenProvider`). Actualmente se admite configurar un token mediante `Matchmaking:ServiceToken`, pero la autenticación definitiva entre servicios sigue pendiente de acordarse.
+
+Para más información, consultar la [guía de integración con Matchmaking](integracion-shell-matchmaking.md).
 
 ---
 
@@ -74,12 +80,16 @@ Solicita unirse o reincorporarse a una partida.
 ### Datos
 
 - `matchId`: identificador de la partida.
+- `matchmakingAccessToken`: token utilizado para validar con Matchmaking que el jugador pertenece a la partida.
 
 ```json
 {
-  "matchId": "match-001"
+  "matchId": "match-001",
+  "matchmakingAccessToken": "TOKEN_DEL_JUGADOR"
 }
 ```
+
+El token es un valor de ejemplo. En una integración real debe proporcionarse un token válido y aceptado por Matchmaking.
 
 La operación es idempotente para un mismo jugador y partida. Si un jugador pierde la conexión y vuelve a ejecutar `JoinMatch`, recupera su participación existente, con su puntaje, y no se agrega como jugador duplicado.
 
@@ -90,7 +100,7 @@ Después de unirse correctamente, el servidor envía `CurrentState` al jugador y
 - `MATCH_NOT_FOUND`: la partida no existe.
 - `PLAYER_NOT_IN_MATCH`: el jugador no pertenece a la partida.
 - `MATCH_FINISHED`: la partida ya terminó.
-- `UNAUTHORIZED`: no se pudo identificar al jugador (identidad simulada ausente antes de E4, o JWT inválido a partir de E4).
+- `UNAUTHORIZED`: no se pudo identificar al jugador mediante un JWT válido.
 
 ## SubmitAnswer
 
@@ -320,8 +330,8 @@ Notifica el cierre de una pregunta y revela su resultado. Se envía a todos los 
 
 Una pregunta se cierra cuando ocurre una de estas condiciones:
 
-- se alcanza `expiresAtUtc`; o
-- todos los jugadores activos han respondido antes del vencimiento.
+- Se alcanza `expiresAtUtc`.
+- Todos los jugadores activos han respondido antes del vencimiento.
 
 Después del cierre comienza una fase de revisión de 5 segundos.
 
@@ -469,10 +479,10 @@ El puntaje de una respuesta correcta se calcula mediante:
 
 Los segundos completos restantes:
 
-- son calculados exclusivamente por el servidor;
-- se obtienen utilizando la hora de recepción de la respuesta;
-- se redondean hacia abajo;
-- nunca son enviados por el cliente.
+- Son calculados exclusivamente por el servidor.
+- Se obtienen utilizando la hora de recepción de la respuesta.
+- Se redondean hacia abajo.
+- Nunca son enviados por el cliente.
 
 El puntaje máximo posible por pregunta es de 240 puntos.
 
@@ -484,7 +494,7 @@ Después del cierre de una pregunta se inicia una fase `reviewing` de 5 segundos
 
 # Secuencia de una partida
 
-1. Cada jugador llama a `JoinMatch` y recibe `CurrentState` (`phase: waiting`). El grupo recibe `PlayerJoined`.
+1. Cada jugador llama a `JoinMatch` con `matchId` y `matchmakingAccessToken`. Después de validar su participación, recibe `CurrentState` (`phase: waiting`). El grupo recibe `PlayerJoined`.
 2. Cuando BattleHub o el servicio responsable del matchmaking indique que la partida está lista, el servidor envía `GameStarted` y el primer `QuestionStarted` (`phase: playing`).
 3. Cada jugador puede llamar una sola vez a `SubmitAnswer` para la pregunta activa y recibe `AnswerReceived`.
 4. La pregunta se cierra cuando todos los jugadores activos hayan respondido o cuando se alcance `expiresAtUtc`. Cada jugador recibe su `QuestionClosed` y el grupo recibe `ScoreboardUpdated` (`phase: reviewing`).
@@ -503,44 +513,48 @@ Si un jugador se reconecta durante una pregunta activa, todavía queda tiempo di
 
 El servidor es responsable de:
 
-- identificar al jugador;
-- mantener el estado de la partida;
-- controlar el temporizador y la pausa entre preguntas;
-- cerrar anticipadamente una pregunta cuando todos los jugadores activos hayan respondido;
-- validar las respuestas;
-- garantizar que cada jugador responda una sola vez por pregunta;
-- determinar si una respuesta llegó dentro del tiempo permitido;
-- determinar la respuesta correcta;
-- calcular los segundos completos restantes utilizando su propia hora;
-- calcular los puntos;
-- mantener el marcador;
-- resolver empates;
-- determinar el ganador;
-- gestionar el estado de jugadores desconectados y reconectados.
+- Identificar al jugador.
+- Mantener el estado de la partida.
+- Controlar el temporizador y la pausa entre preguntas.
+- Cerrar anticipadamente una pregunta cuando todos los jugadores activos hayan respondido.
+- Validar las respuestas.
+- Garantizar que cada jugador responda una sola vez por pregunta.
+- Determinar si una respuesta llegó dentro del tiempo permitido.
+- Determinar la respuesta correcta.
+- Calcular los segundos completos restantes utilizando su propia hora.
+- Calcular los puntos.
+- Mantener el marcador.
+- Resolver empates.
+- Determinar el ganador.
+- Gestionar el estado de jugadores desconectados y reconectados.
 
 ## Cliente
 
 El cliente es responsable de:
 
-- solicitar la unión a una partida;
-- representar el estado recibido mediante `CurrentState`;
-- mostrar jugadores conectados y desconectados;
-- mostrar preguntas y opciones;
-- enviar la respuesta seleccionada;
-- representar el tiempo restante con `expiresAtUtc`, corregido con `serverTimeUtc`;
-- mostrar la confirmación de una respuesta enviada y bloquear las demás opciones;
-- mostrar la respuesta correcta, la elegida y los puntos ganados cuando la pregunta haya cerrado;
-- mostrar la fase de revisión de 5 segundos;
-- actualizar el marcador;
-- mostrar el resultado final, incluido el desempate o el empate;
-- mostrar los errores recibidos desde el servidor.
+- Solicitar la unión a una partida.
+- Representar el estado recibido mediante `CurrentState`.
+- Mostrar jugadores conectados y desconectados.
+- Mostrar preguntas y opciones.
+- Enviar la respuesta seleccionada.
+- Representar el tiempo restante con `expiresAtUtc`, corregido con `serverTimeUtc`.
+- Mostrar la confirmación de una respuesta enviada y bloquear las demás opciones.
+- Mostrar la respuesta correcta, la elegida y los puntos ganados cuando la pregunta haya cerrado.
+- Mostrar la fase de revisión de 5 segundos.
+- Actualizar el marcador.
+- Mostrar el resultado final, incluido el desempate o el empate.
+- Mostrar los errores recibidos desde el servidor.
 
 ---
 
 # Cambios respecto a la versión anterior
 
 - Se agregó `serverTimeUtc` a los eventos relacionados con tiempo para corregir relojes locales desfasados.
-- Se definió cómo se utiliza una identidad simulada antes de implementar JWT en E4.
+- Se actualizó la autenticación de Trivia Battle para utilizar JWT propio con firma RS256.
+- Se establecieron el emisor `battlehub-trivia` y la audiencia `battlehub-trivia-api`.
+- Se documentó el parámetro `matchmakingAccessToken` requerido por `JoinMatch`.
+- Se aclaró que la compatibilidad de autenticación con Matchmaking todavía requiere coordinación entre equipos.
+- Se documentó el proveedor `IMatchmakingTokenProvider` para las notificaciones de finalización de partidas.
 - Se agregaron las estructuras comunes `Player` y `Question`.
 - La lista de jugadores incluye a los jugadores que aún no se han conectado.
 - Se agregó la fase `reviewing`, con una duración de 5 segundos.
