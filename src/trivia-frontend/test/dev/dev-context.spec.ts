@@ -1,4 +1,4 @@
-import { readDevContext } from '../../../src/trivia-frontend/src/dev/dev-context';
+import { readDevContext } from '../../src/dev/dev-context';
 
 describe('readDevContext', () => {
   it('sin parámetros usa la partida y el jugador por defecto', () => {

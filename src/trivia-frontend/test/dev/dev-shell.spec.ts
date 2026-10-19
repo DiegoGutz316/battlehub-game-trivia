@@ -1,8 +1,8 @@
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
-import { DevShell } from '../../../src/trivia-frontend/src/dev/dev-shell';
+import { DevShell } from '../../src/dev/dev-shell';
 
-jest.mock('../../../src/trivia-frontend/src/services/trivia-hub/signalr-trivia-client', () => ({
+jest.mock('../../src/services/trivia-hub/signalr-trivia-client', () => ({
   SignalRTriviaClient: jest.fn(() => ({
     connect: jest.fn(async () => undefined),
     disconnect: jest.fn(async () => undefined),
