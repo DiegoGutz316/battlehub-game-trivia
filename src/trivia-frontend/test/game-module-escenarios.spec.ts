@@ -18,7 +18,8 @@ const mockClient = {
 };
 jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn(() => mockClient) }));
 
-const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'one', displayName: 'Uno' } };
+const preview: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'one', displayName: 'Uno' } };
+const ctx: GameContext = { ...preview, getAccessToken: jest.fn(async () => 'trivia-token'), getMatchmakingAccessToken: jest.fn(async () => 'room-token') };
 const players: Player[] = [
   { userId: 'one', displayName: 'Uno', score: 0, isConnected: true },
   { userId: 'two', displayName: 'Dos', score: 0, isConnected: false },
@@ -74,6 +75,16 @@ describe('errores', () => {
     await expect(game.start()).rejects.toThrow('PLAYER_NOT_IN_MATCH');
     expect(game.state).toBe('initialized');
     expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('si el Shell no entrega el token de Matchmaking, start() falla sin entrar a la partida', async () => {
+    (ctx.getMatchmakingAccessToken as jest.Mock).mockRejectedValueOnce(new Error('LOGIN_REQUIRED'));
+    const game = new GameModule();
+    await game.initialize(ctx);
+
+    await expect(game.start()).rejects.toThrow('LOGIN_REQUIRED');
+    expect(mockClient.joinMatch).not.toHaveBeenCalled();
+    expect(game.state).toBe('initialized');
   });
 
   it('rechaza initialize() dos veces', async () => {
@@ -311,6 +322,7 @@ describe('historial', () => {
     const game = await running();
     const first = game.loadHistory();
     await game.loadHistory();
+    await flush();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     finish({ ok: true, json: async () => [] });
     await game.dispose();
@@ -318,10 +330,50 @@ describe('historial', () => {
     expect(game.history).toEqual([]);
   });
 
+  it('pide el historial con el token de Trivia', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    globalThis.fetch = fetchMock;
+    const game = await running();
+
+    await game.loadHistory();
+
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:5185/api/games/trivia/players/one/stats');
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer trivia-token');
+    await game.dispose();
+  });
+
   it('myScore() devuelve 0 si el jugador no aparece en la partida', async () => {
     const game = await running();
     expect(game.myScore({ matchId: 'm', players: [{ userId: 'two', score: 500, position: 1 }] })).toBe(0);
     await game.dispose();
+  });
+});
+
+describe('vista previa sin tokens', () => {
+  it('start() queda en running sin conectarse al hub y muestra el aviso', async () => {
+    const fixture = await createFixture('<trivia-game-module component.ref="game"></trivia-game-module>', class { public game!: GameModule; }, [GameModule]).started;
+    const game = fixture.component.game;
+    await game.initialize(preview);
+    await game.start();
+    await tasksSettled();
+
+    expect(game.preview).toBe(true);
+    expect(game.state).toBe('running');
+    expect(SignalRTriviaClient).not.toHaveBeenCalled();
+    expect(fixture.appHost.textContent).toContain('Vista previa');
+    expect(fixture.appHost.textContent).not.toContain('Conexión:');
+    await game.dispose();
+  });
+
+  it('no consulta el historial sin token', async () => {
+    const fetchMock = jest.fn();
+    globalThis.fetch = fetchMock;
+    const game = new GameModule();
+    await game.initialize(preview);
+
+    await game.loadHistory();
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
