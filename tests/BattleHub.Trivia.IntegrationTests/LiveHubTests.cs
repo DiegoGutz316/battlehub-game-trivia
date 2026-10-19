@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Threading.Channels;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Api.Matchmaking;
@@ -21,8 +21,8 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var ct = timeout.Token;
         var id = "live-" + Guid.NewGuid().ToString("N");
-        await using var one = Connection("auth0|one");
-        await using var two = Connection("auth0|two");
+        await using var one = Connection("player-one");
+        await using var two = Connection("player-two");
         var questions = Channel.CreateUnbounded<JsonElement>();
         var finished = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         one.On<JsonElement>("QuestionStarted", data => { questions.Writer.TryWrite(data); });
@@ -47,11 +47,11 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
             await sessions.TickAsync(ct);
         }
         var result = await finished.Task.WaitAsync(ct);
-        Assert.Equal("auth0|one", result.GetProperty("winnerUserId").GetString());
+        Assert.Equal("player-one", result.GetProperty("winnerUserId").GetString());
         var saved = await scope.ServiceProvider.GetRequiredService<IResultRepository>().GetByMatchIdAsync(id, ct);
         Assert.NotNull(saved);
-        Assert.Equal(2200, saved.Players.Single(p => p.UserId == "auth0|one").Score);
-        Assert.Equal(10, saved.Players.Single(p => p.UserId == "auth0|one").CorrectAnswers);
+        Assert.Equal(2200, saved.Players.Single(p => p.UserId == "player-one").Score);
+        Assert.Equal(10, saved.Players.Single(p => p.UserId == "player-one").CorrectAnswers);
         var db = scope.ServiceProvider.GetRequiredService<TriviaDbContext>();
         Assert.False((await db.FinishNotifications.AsNoTracking().SingleAsync(p => p.MatchId == id, ct)).Delivered);
         var worker = new FinishWorker(factory.Services.GetRequiredService<IServiceScopeFactory>(),

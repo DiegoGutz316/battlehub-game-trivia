@@ -1,4 +1,4 @@
-using BattleHub.Trivia.Api.Matchmaking;
+﻿using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Interfaces;
@@ -31,7 +31,7 @@ public sealed class FinishWorkerTests(TriviaApiFactory factory)
         using var scope = factory.Services.CreateScope();
         await scope.ServiceProvider.GetRequiredService<IResultRepository>().SaveAsync(new MatchResult {
             MatchId = id, StartedAt = factory.Clock.GetUtcNow(), FinishedAt = factory.Clock.GetUtcNow(),
-            Players = [new PlayerResult { UserId = "auth0|one", DisplayName = "Uno", Position = 1 }], WinnerUserId = "auth0|one"
+            Players = [new PlayerResult { UserId = "player-one", DisplayName = "Uno", Position = 1 }], WinnerUserId = "player-one"
         });
         var gateway = new Gateway(id, outcome);
         var worker = CreateWorker(gateway);

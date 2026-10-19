@@ -15,8 +15,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.IdentityModel.Protocols;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 using Testcontainers.MsSql;
@@ -55,7 +53,7 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
                 var token = call.ArgAt<string>(2);
 
                 if (token != "room-token" ||
-                    user is not ("auth0|one" or "auth0|two"))
+                    user is not ("player-one" or "player-two"))
                 {
                     throw new HubException("PLAYER_NOT_IN_MATCH");
                 }
@@ -65,8 +63,8 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
                     "trivia",
                     "Started",
                     [
-                        new("auth0|one", "Uno"),
-                        new("auth0|two", "Dos")
+                        new("player-one", "Uno"),
+                        new("player-two", "Dos")
                     ]
                 ));
             });
@@ -82,11 +80,8 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
 
     public TestClock Clock { get; } = new();
 
-    public const string Issuer =
-        "https://dev-jaii1peslxnejq0y.us.auth0.com/";
-
-    public const string Audience =
-        "https://api.battlehub.local/trivia";
+    public const string Issuer = "battlehub-trivia";
+    public const string Audience = "battlehub-trivia-api";
 
     private readonly RSA rsa = RSA.Create(2048);
 
@@ -200,7 +195,7 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
                 StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
-                    "Base de prueba inválida.");
+                    "Base de prueba invÃ¡lida.");
             }
 
             using var scope = Services.CreateScope();
@@ -223,6 +218,15 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        builder.UseSetting("Auth:Issuer", Issuer);
+
+        builder.UseSetting("Auth:Audience", Audience);
+
+        builder.UseSetting(
+            "Auth:PublicKey",
+            Convert.ToBase64String(
+                rsa.ExportSubjectPublicKeyInfo()));
 
         builder.ConfigureTestServices(services =>
         {
@@ -247,22 +251,17 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
                 JwtBearerDefaults.AuthenticationScheme,
                 jwt =>
                 {
-                    var configuration =
-                        new OpenIdConnectConfiguration
-                        {
-                            Issuer = Issuer
-                        };
+                    jwt.Authority = null;
+                    jwt.ConfigurationManager = null;
 
-                    configuration.SigningKeys.Add(
-                        new RsaSecurityKey(rsa)
+                    jwt.TokenValidationParameters.ValidIssuer = Issuer;
+                    jwt.TokenValidationParameters.ValidAudience = Audience;
+
+                    jwt.TokenValidationParameters.IssuerSigningKey =
+                        new RsaSecurityKey(rsa.ExportParameters(false))
                         {
                             KeyId = "test-rsa"
-                        });
-
-                    jwt.ConfigurationManager =
-                        new StaticConfigurationManager
-                            <OpenIdConnectConfiguration>(
-                                configuration);
+                        };
                 });
         });
     }

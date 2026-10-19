@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography;
 
 namespace BattleHub.Trivia.Api.Auth;
 
@@ -15,39 +16,96 @@ public static class TriviaAuth
         || user.FindFirst("scope")?.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(permission) == true;
     public static bool IsWriter(ClaimsPrincipal user) => IsMachine(user) && HasPermission(user, "games.trivia.results.write");
 
-    public static IServiceCollection AddTriviaAuth(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddTriviaAuth(
+    this IServiceCollection services,
+    IConfiguration config)
+{
+    var issuer = config["Auth:Issuer"];
+    var audience = config["Auth:Audience"];
+    var publicKey = config["Auth:PublicKey"];
+
+    if (string.IsNullOrWhiteSpace(issuer) ||
+        string.IsNullOrWhiteSpace(audience) ||
+        string.IsNullOrWhiteSpace(publicKey))
     {
-        var domain = config["Auth:Domain"]?.Trim();
-        var audience = config["Auth:Audience"]?.Trim();
-        if (string.IsNullOrWhiteSpace(domain) || domain.Contains('/') || string.IsNullOrWhiteSpace(audience))
-            throw new InvalidOperationException("Configurar Auth:Domain (hostname) y Auth:Audience de Trivia.");
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(jwt =>
-        {
-            jwt.Authority = $"https://{domain}/";
-            jwt.Audience = audience;
-            jwt.MapInboundClaims = false;
-            jwt.RequireHttpsMetadata = true;
-            jwt.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true, ValidIssuer = $"https://{domain}/", ValidateAudience = true,
-                ValidateLifetime = true, ValidateIssuerSigningKey = true, ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
-                NameClaimType = "name", ClockSkew = TimeSpan.FromSeconds(30)
-            };
-            jwt.Events = new JwtBearerEvents
-            {
-                OnMessageReceived = ctx =>
-                {
-                    if (ctx.Request.Path.StartsWithSegments("/hubs/trivia")) ctx.Token = ctx.Request.Query["access_token"];
-                    return Task.CompletedTask;
-                }
-            };
-        });
-        services.AddAuthorization(options =>
-        {
-            options.AddPolicy(Play, p => p.RequireAuthenticatedUser().RequireAssertion(c => !IsMachine(c.User) && UserId(c.User).Length > 0));
-            options.AddPolicy(Read, p => p.RequireAuthenticatedUser().RequireAssertion(c => (!IsMachine(c.User) && UserId(c.User).Length > 0) || IsWriter(c.User)));
-            options.AddPolicy(Write, p => p.RequireAuthenticatedUser().RequireAssertion(c => IsWriter(c.User)));
-        });
-        return services;
+        throw new InvalidOperationException(
+            "Configurar Auth:Issuer, Auth:Audience y Auth:PublicKey.");
     }
+
+    RSA rsa = RSA.Create();
+
+    try
+    {
+        rsa.ImportSubjectPublicKeyInfo(
+            Convert.FromBase64String(publicKey),
+            out _);
+
+        var signingKey = new RsaSecurityKey(rsa.ExportParameters(false));
+
+        services
+            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(jwt =>
+            {
+                jwt.MapInboundClaims = false;
+
+                jwt.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = issuer,
+
+                    ValidateAudience = true,
+                    ValidAudience = audience,
+
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+
+                    IssuerSigningKey = signingKey,
+
+                    ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
+
+                    NameClaimType = "name",
+                    ClockSkew = TimeSpan.FromSeconds(30)
+                };
+
+                jwt.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = ctx =>
+                    {
+                        if (ctx.Request.Path.StartsWithSegments("/hubs/trivia"))
+                        {
+                            ctx.Token = ctx.Request.Query["access_token"];
+                        }
+
+                        return Task.CompletedTask;
+                    }
+                };
+            });
+    }
+    finally
+    {
+        rsa.Dispose();
+    }
+
+    services.AddAuthorization(options =>
+    {
+        options.AddPolicy(Play, p =>
+            p.RequireAuthenticatedUser()
+             .RequireAssertion(c =>
+                 !IsMachine(c.User) &&
+                 UserId(c.User).Length > 0));
+
+        options.AddPolicy(Read, p =>
+            p.RequireAuthenticatedUser()
+             .RequireAssertion(c =>
+                 (!IsMachine(c.User) &&
+                  UserId(c.User).Length > 0) ||
+                 IsWriter(c.User)));
+
+        options.AddPolicy(Write, p =>
+            p.RequireAuthenticatedUser()
+             .RequireAssertion(c => IsWriter(c.User)));
+    });
+
+    return services;
+}
 }

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Data.Repositories;
@@ -21,7 +21,7 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
     {
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = scenario == "anonymous" ? null : new AuthenticationHeaderValue("Bearer", factory.Token(
-            "auth0|player", issuer: scenario == "issuer" ? "https://wrong.example/" : TriviaApiFactory.Issuer,
+            "player-one", issuer: scenario == "issuer" ? "https://wrong.example/" : TriviaApiFactory.Issuer,
             audience: scenario == "audience" ? "https://api.battlehub.local/profile" : TriviaApiFactory.Audience,
             expires: scenario == "expired" ? DateTime.UtcNow.AddMinutes(-2) : null));
         if (scenario == "signature")
@@ -39,7 +39,7 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
     {
         using var client = factory.CreateClient();
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/hubs/trivia/negotiate?negotiateVersion=1", null)).StatusCode);
-        client.DefaultRequestHeaders.Authorization = new("Bearer", factory.Token("auth0|player", writer: false));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", factory.Token("player-one", writer: false));
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/hubs/trivia/negotiate?negotiateVersion=1", null)).StatusCode);
     }
 
@@ -47,12 +47,12 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
     public async Task PlayerCannotWriteResultsOrReadOthersHistory()
     {
         using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new("Bearer", factory.Token("auth0|player", writer: false));
+        client.DefaultRequestHeaders.Authorization = new("Bearer", factory.Token("player-one", writer: false));
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/api/games/trivia/results", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"))).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/games/trivia/players/auth0%7Cother/history")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/games/trivia/players/auth0%7Cplayer/history")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/games/trivia/players/player-other/history")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/games/trivia/players/player-one/history")).StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/games/trivia/players/auth0%7Cplayer/history?access_token=" + factory.Token("auth0|player"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/games/trivia/players/player-one/history?access_token=" + factory.Token("player-one"))).StatusCode);
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
         var id = "outbox-" + Guid.NewGuid().ToString("N");
         await new ResultRepository(db).SaveAsync(new MatchResult {
             MatchId = id, StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1), FinishedAt = DateTimeOffset.UtcNow,
-            Players = [new PlayerResult { UserId = "auth0|player", DisplayName = "Jugador", Position = 1 }], WinnerUserId = "auth0|player"
+            Players = [new PlayerResult { UserId = "player-one", DisplayName = "Jugador", Position = 1 }], WinnerUserId = "player-one"
         });
         var pending = await db.FinishNotifications.AsNoTracking().SingleAsync(item => item.MatchId == id);
         Assert.False(pending.Delivered);
