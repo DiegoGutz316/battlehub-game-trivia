@@ -195,7 +195,7 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
                 StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
-                    "Base de prueba invÃ¡lida.");
+                    "Base de prueba inválida.");
             }
 
             using var scope = Services.CreateScope();

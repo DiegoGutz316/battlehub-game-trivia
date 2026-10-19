@@ -1,5 +1,4 @@
-﻿
-# Integración de Trivia con Shell y Matchmaking
+﻿# Integración de Trivia con Shell y Matchmaking
 
 ## Descripción general
 
@@ -25,11 +24,11 @@ La integración con Shell y Matchmaking se mantiene como una funcionalidad del p
 
 El backend valida JWT utilizando los siguientes valores de configuración:
 
-| Configuración | Descripción |
-| --- | --- |
-| `Auth:Issuer` | Emisor autorizado de los tokens de Trivia |
-| `Auth:Audience` | Audiencia correspondiente a la API de Trivia |
-| `Auth:PublicKey` | Clave pública RSA para verificar las firmas |
+| Configuración    | Descripción                                  |
+| ---------------- | -------------------------------------------- |
+| `Auth:Issuer`    | Emisor autorizado de los tokens de Trivia    |
+| `Auth:Audience`  | Audiencia correspondiente a la API de Trivia |
+| `Auth:PublicKey` | Clave pública RSA para verificar las firmas  |
 
 Los valores actuales de emisor y audiencia son:
 
@@ -37,7 +36,15 @@ Los valores actuales de emisor y audiencia son:
 - Audiencia: `battlehub-trivia-api`
 - Algoritmo: `RS256`
 
-La clave pública debe configurarse antes de iniciar la API. No se deben almacenar claves privadas ni credenciales en el repositorio.
+La clave pública debe configurarse antes de iniciar la API. Para hacerlo localmente, desde la raíz del repositorio se puede utilizar User Secrets:
+
+```powershell
+dotnet user-secrets set "Auth:PublicKey" "<CLAVE_PUBLICA_RSA>" --project src/BattleHub.Trivia.Api
+```
+
+Se debe reemplazar `<CLAVE_PUBLICA_RSA>` por la clave pública RSA correspondiente a los tokens JWT que utilizará Trivia. La clave debe estar en el formato esperado por el backend.
+
+No se deben almacenar claves privadas ni credenciales en el repositorio. La clave pública se utiliza únicamente para verificar las firmas de los tokens, no para generarlos.
 
 ## Integración con Matchmaking
 

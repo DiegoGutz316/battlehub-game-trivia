@@ -1,26 +1,43 @@
 ﻿[CmdletBinding()]
-param([string]$ClientId = 'xYhNYG9lOGLA6KvEM0Y4cccH2f7JDD5x')
+param()
+
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-if (-not $ClientId) { $ClientId = Read-Host 'Client ID de BattleHub Trivia Service (M2M)' }
-if ([string]::IsNullOrWhiteSpace($ClientId)) { throw 'Client ID obligatorio.' }
-$secureValue = Read-Host 'Client Secret privado de Trivia Service' -AsSecureString
+
+$secureValue = Read-Host 'Token privado del servicio Matchmaking' -AsSecureString
 $pointer = [IntPtr]::Zero
+$privateValue = $null
 $privateJson = $null
+
 try {
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
     $privateValue = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
-    if ([string]::IsNullOrWhiteSpace($privateValue)) { throw 'Client Secret obligatorio.' }
+
+    if ([string]::IsNullOrWhiteSpace($privateValue)) {
+        throw 'El token de Matchmaking es obligatorio.'
+    }
+
     $privateJson = @{
-        'Matchmaking:Auth0:ClientId' = $ClientId
-        'Matchmaking:Auth0:ClientSecret' = $privateValue
+        'Matchmaking:ServiceToken' = $privateValue
     } | ConvertTo-Json -Compress
+
     $privateJson | dotnet user-secrets set --project (Join-Path $repoRoot 'src/BattleHub.Trivia.Api')
-    if ($LASTEXITCODE -ne 0) { throw 'No se pudieron guardar las credenciales locales.' }
-    Write-Host 'Credenciales guardadas fuera del repo. Reinicia Trivia.'
-} finally {
-    if ($pointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw 'No se pudo guardar el token de Matchmaking.'
+    }
+
+    Write-Host 'Token guardado fuera del repositorio. Reinicia Trivia.'
+}
+finally {
+    if ($pointer -ne [IntPtr]::Zero) {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+    }
+
     $privateJson = $null
     $privateValue = $null
-    $secureValue.Dispose()
+
+    if ($null -ne $secureValue) {
+        $secureValue.Dispose()
+    }
 }
