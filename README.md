@@ -183,11 +183,11 @@ Las pruebas viven en `src/trivia-frontend/test/`, dentro del proyecto como en la
 
 El CI mide la cobertura de líneas en cada ejecución:
 
-- **Backend:** las pruebas unitarias y de integración se ejecutan con `--collect:"XPlat Code Coverage"` (coverlet) y ReportGenerator une los dos reportes. El detalle por clase queda en el resumen del job `backend` en GitHub Actions.
+- **Backend:** las pruebas unitarias y de integración se ejecutan con `--collect:"XPlat Code Coverage"` (coverlet) y ReportGenerator une los dos reportes. El detalle por clase queda en el resumen del job `backend` en GitHub Actions. No se cuenta el código que genera el compilador (`*.g.cs`, `*.generated.cs`), como `OpenApiXmlCommentSupport.generated.cs` de `Microsoft.AspNetCore.OpenApi`: no lo escribe el equipo y se crea en `obj/` al compilar.
 - **Frontend:** Jest genera `coverage/coverage-summary.json` (y el reporte HTML en `coverage/lcov-report/`).
 - **En cada pull request**, el job `coverage-comment` publica un comentario con la cobertura de backend y frontend, y lo actualiza en cada push en vez de crear uno nuevo.
 
-El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `.github/workflows/ci.yml`). Mientras la cobertura no lo alcance, `ENFORCE_COVERAGE` está en `"false"`: el CI muestra un aviso pero no falla. Para que los jobs `backend` y `frontend` fallen por debajo del mínimo, cambiar esa línea a `"true"`.
+El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `.github/workflows/ci.yml`), tanto en el backend como en el frontend. Con `ENFORCE_COVERAGE: "true"`, si alguna de las dos partes queda por debajo, su job (`backend` o `frontend`) falla y el PR no pasa el CI. Exactamente 85 % cumple.
 
 Para ver la cobertura localmente:
 
@@ -196,7 +196,7 @@ Para ver la cobertura localmente:
 dotnet tool restore
 dotnet test tests/BattleHub.Trivia.UnitTests --collect:"XPlat Code Coverage" --results-directory coverage/raw
 dotnet test tests/BattleHub.Trivia.IntegrationTests --collect:"XPlat Code Coverage" --results-directory coverage/raw
-dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend -reporttypes:Html
+dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend -reporttypes:Html "-filefilters:-*.g.cs;-*.generated.cs"
 # abrir coverage/backend/index.html
 
 # Frontend (desde src/trivia-frontend)

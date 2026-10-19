@@ -12,8 +12,8 @@ permissions:
 env:
   # Mínimo de cobertura de líneas (requisito del profesor).
   COVERAGE_THRESHOLD: "85"
-  # "false": solo avisa si la cobertura es menor al mínimo. Cambiar a "true" para que el CI falle.
-  ENFORCE_COVERAGE: "false"
+  # "true": los jobs backend y frontend fallan si la cobertura es menor al mínimo ("false" solo avisa).
+  ENFORCE_COVERAGE: "true"
 
 jobs:
   secrets:
@@ -62,8 +62,9 @@ jobs:
         run: dotnet test tests/BattleHub.Trivia.IntegrationTests --no-build --collect:"XPlat Code Coverage" --results-directory coverage/raw
 
       - name: Coverage report
+        # Excluye el código que genera el compilador (*.g.cs, *.generated.cs), por ejemplo el de Microsoft.AspNetCore.OpenApi.
         run: |
-          dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend "-reporttypes:JsonSummary;MarkdownSummaryGithub"
+          dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend "-reporttypes:JsonSummary;MarkdownSummaryGithub" "-filefilters:-*.g.cs;-*.generated.cs"
           cat coverage/backend/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage summary
