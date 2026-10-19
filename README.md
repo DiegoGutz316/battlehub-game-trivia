@@ -131,17 +131,23 @@ http://localhost:4002/?userId=user-dev-2&displayName=Jugador%202
 
 #### Integración con el Shell (Module Federation, ADR-003)
 
-| Dato | Valor |
-|---|---|
-| Nombre del remote | `triviaGame` |
-| Punto de entrada | `http://localhost:4002/remoteEntry.js` (local) |
-| Módulo expuesto | `./GameModule`, que exporta la clase `GameModule` (elemento `trivia-game-module`) |
-| Prefijo de clases CSS | `trivia-game` |
+| Dato                  | Valor                                                                             |
+| --------------------- | --------------------------------------------------------------------------------- |
+| Nombre del remote     | `triviaGame`                                                                      |
+| Punto de entrada      | `http://localhost:4002/remoteEntry.js` (local)                                    |
+| Módulo expuesto       | `./GameModule`, que exporta la clase `GameModule` (elemento `trivia-game-module`) |
+| Prefijo de clases CSS | `trivia-game`                                                                     |
 
 Entrada para el `remotes.config.json` del Shell:
 
 ```json
-{ "trivia": { "scope": "triviaGame", "url": "http://localhost:4002/remoteEntry.js", "module": "./GameModule" } }
+{
+  "trivia": {
+    "scope": "triviaGame",
+    "url": "http://localhost:4002/remoteEntry.js",
+    "module": "./GameModule"
+  }
+}
 ```
 
 Para probarlo dentro del Shell se puede usar la prueba de concepto del Equipo 3 ([battlehub-shell/poc](https://github.com/KeynerMC/battlehub-shell/tree/main/poc)): con `npm start` corriendo aquí, poner esa entrada en `poc/shell/config/remotes.local.json` y `gameType: 'trivia'` en `poc/shell/src/my-app.ts`. Capturas de esa prueba: `docs/evidencias/adr-003/`.
@@ -179,18 +185,19 @@ npx jest
 
 ## Configuración y secretos
 
-Ningún valor sensible (contraseñas, Client Secret, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles.
+Ningún valor sensible (contraseñas, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles.
 
-| Clave en `appsettings.json` | Variable de entorno | ¿Sensible? | Dónde va |
-|---|---|---|---|
-| `ConnectionStrings:Trivia` | `ConnectionStrings__Trivia` | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno |
-| `Matchmaking:Auth0:ClientSecret` | `Matchmaking__Auth0__ClientSecret` | **Sí** | Local: user-secrets. Docker o servidor: variable de entorno |
-| `Auth:Domain`, `Auth:Audience`, `Matchmaking:Auth0:Domain`, `Matchmaking:Auth0:Audience`, `Matchmaking:Auth0:ClientId` | `Auth__Domain`, etc. | No: identificadores públicos de Auth0 | `appsettings.json` |
-| `Matchmaking:BaseUrl`, `Cors:Origins` | `Matchmaking__BaseUrl`, `Cors__Origins__0`, etc. | No | `appsettings.json`; se reemplazan por variable de entorno según el ambiente |
-| `Database:MigrateOnStartup`, `Database:SeedQuestions` | `Database__MigrateOnStartup`, `Database__SeedQuestions` | No | `false` en `appsettings.json` y `true` en el perfil de desarrollo (`launchSettings.json`). Fuera de *Development*, o con `dotnet run --no-launch-profile`, se activan por configuración o variable de entorno |
-| `TRIVIA_API_URL` (frontend) | `TRIVIA_API_URL` | No | Variable de entorno antes de `npm start` o `npm run build` |
+| Clave en `appsettings.json`                           | Variable de entorno                                     | ¿Sensible?                          | Dónde va                                                                                                                                                                                                      |
+| ----------------------------------------------------- | ------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionStrings:Trivia`                            | `ConnectionStrings__Trivia`                             | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                                                                                                               |
+| `Matchmaking:ServiceToken`                            | `Matchmaking__ServiceToken`                             | **Sí**                              | Local: user-secrets. Docker o servidor: variable de entorno                                                                                                                                                   |
+| `Auth:Issuer`, `Auth:Audience`                        | `Auth__Issuer`, `Auth__Audience`                        | No                                  | `appsettings.json`; se pueden reemplazar según el ambiente                                                                                                                                                    |
+| `Auth:PublicKey`                                      | `Auth__PublicKey`                                       | No, es una clave pública            | Local: user-secrets o configuración del entorno. Nunca incluir la clave privada                                                                                                                               |
+| `Matchmaking:BaseUrl`, `Cors:Origins`                 | `Matchmaking__BaseUrl`, `Cors__Origins__0`, etc.        | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                                                                                                                   |
+| `Database:MigrateOnStartup`, `Database:SeedQuestions` | `Database__MigrateOnStartup`, `Database__SeedQuestions` | No                                  | `false` en `appsettings.json` y `true` en el perfil de desarrollo (`launchSettings.json`). Fuera de _Development_, o con `dotnet run --no-launch-profile`, se activan por configuración o variable de entorno |
+| `TRIVIA_API_URL` (frontend)                           | `TRIVIA_API_URL`                                        | No                                  | Variable de entorno antes de `npm start` o `npm run build`                                                                                                                                                    |
 
-**En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno *Development*:
+**En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno _Development_:
 
 ```bash
 # Desde la raíz del repositorio
@@ -202,4 +209,4 @@ dotnet user-secrets list --project src/BattleHub.Trivia.Api
 
 **Revisión automática:** el job `secrets` del CI ejecuta [gitleaks](https://github.com/gitleaks/gitleaks) sobre todo el historial en cada pull request y en cada push a `main`. Si encuentra un secreto, el job falla y el PR no se puede mergear. Para revisarlo antes de subir cambios: `gitleaks git .` desde la raíz del repositorio.
 
-**Si se sube un secreto por error**, hay que considerarlo expuesto: borrarlo del código no alcanza, porque sigue en el historial. Hay que cambiarlo de inmediato (por ejemplo, generar un Client Secret nuevo en Auth0) y avisar al equipo. Si gitleaks marca algo que no es un secreto, se agrega su *fingerprint* a `.gitleaksignore`, explicando el motivo en el PR.
+**Si se sube un secreto por error**, hay que considerarlo expuesto: borrarlo del código no alcanza, porque sigue en el historial. Hay que cambiarlo de inmediato (por ejemplo, revocar el token expuesto y generar uno nuevo) y avisar al equipo. Si gitleaks marca algo que no es un secreto, se agrega su _fingerprint_ a `.gitleaksignore`, explicando el motivo en el PR.
