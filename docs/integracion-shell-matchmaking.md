@@ -118,6 +118,8 @@ Por defecto se usa la base LocalDB `BattleHubTrivia`. Para usar otra base se con
 
 Fuera de Development, o al iniciar con `--no-launch-profile`, ambos valores están en `false` (`appsettings.json`) y deben activarse por configuración o variable de entorno.
 
+Para ejecutar la API en un contenedor, ver la sección "Docker" del backend en el [README](../README.md).
+
 ## Pruebas de integración
 
 Para comprobar una partida integrada se debe:

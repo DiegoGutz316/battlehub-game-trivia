@@ -137,6 +137,67 @@ jobs:
         if: failure()
         run: docker logs trivia-frontend || true
 
+  backend-docker:
+    name: backend-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build --file src/BattleHub.Trivia.Api/Dockerfile --tag battlehub-trivia-api:ci .
+
+      - name: Smoke test
+        run: |
+          # Contraseña de SQL Server solo para este job: se genera aquí, se oculta en los registros y no se guarda.
+          sql_password="Tv7-$(openssl rand -hex 16)"
+          echo "::add-mask::$sql_password"
+
+          # Clave pública temporal: no se guarda en el repositorio y la privada se borra al instante.
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$RUNNER_TEMP/ci-key.pem"
+          public_key="$(openssl pkey -in "$RUNNER_TEMP/ci-key.pem" -pubout -outform DER | base64 --wrap=0)"
+          rm "$RUNNER_TEMP/ci-key.pem"
+
+          docker network create trivia-net
+          docker run --detach --name trivia-sql --network trivia-net \
+            --env ACCEPT_EULA=Y --env MSSQL_SA_PASSWORD="$sql_password" \
+            mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
+
+          # sqlcmd está en mssql-tools18 o en mssql-tools, según la versión de la imagen.
+          sqlcmd="$(docker exec trivia-sql sh -c 'ls /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd 2>/dev/null | head -n 1')"
+          query() {
+            docker exec --env SQLCMDPASSWORD="$sql_password" trivia-sql "$sqlcmd" -S localhost -U sa -C -b -h -1 -W "$@"
+          }
+          for attempt in $(seq 1 60); do
+            query -Q "SELECT 1" > /dev/null 2>&1 && break
+            sleep 2
+          done
+          query -Q "SELECT 1" > /dev/null
+
+          docker run --detach --name trivia-api --network trivia-net --publish 5185:8080 \
+            --env Auth__PublicKey="$public_key" \
+            --env ConnectionStrings__Trivia="Server=trivia-sql,1433;Database=BattleHubTrivia;User Id=sa;Password=$sql_password;TrustServerCertificate=true" \
+            --env Database__MigrateOnStartup=true --env Database__SeedQuestions=true \
+            battlehub-trivia-api:ci
+
+          # La API migra y carga las preguntas antes de empezar a responder.
+          for attempt in $(seq 1 60); do
+            curl --fail --silent --output /dev/null http://localhost:5185/health && break
+            sleep 2
+          done
+          curl --fail --silent --show-error http://localhost:5185/health | grep --quiet "^Healthy$"
+
+          counts="$(query -d BattleHubTrivia -Q "SET NOCOUNT ON; SELECT CONCAT((SELECT COUNT(*) FROM __EFMigrationsHistory), ',', (SELECT COUNT(*) FROM Questions), ',', (SELECT COUNT(*) FROM AnswerOptions));" | tr -d '[:space:]')"
+          echo "Migraciones, preguntas y opciones: $counts"
+          test "$counts" = "5,30,120"
+
+          docker image ls battlehub-trivia-api:ci --format "Imagen de la API: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Container logs
+        if: failure()
+        run: |
+          docker logs trivia-api || true
+          docker logs trivia-sql || true
+
   coverage-comment:
     name: coverage-comment
     # Comenta también cuando la cobertura hace fallar backend o frontend.

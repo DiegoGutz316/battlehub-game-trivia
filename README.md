@@ -6,7 +6,7 @@ Microservicio del juego **Trivia Battle** (Equipo 5) del proyecto BattleHub.
 
 ## Entrega de integración local
 
-La implementación local del Shell y el juego se explica en [Integración con Auth0 y Matchmaking](docs/integracion-shell-auth0.md). Incluye partidas SignalR, resultado persistido y cola M2M. Revisar esa guía antes de los comandos históricos de este README; no implica publicación ni aprobación de extensiones del contrato central.
+La implementación local del Shell y el juego se explica en [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md). Incluye partidas SignalR, resultado persistido y cola M2M. Revisar esa guía antes de los comandos históricos de este README; no implica publicación ni aprobación de extensiones del contrato central.
 
 Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://github.com/javiercoulon-public/battlehub-contracts).
 
@@ -24,8 +24,10 @@ BattleHub.Trivia.slnx                → solución .NET (agrupa los 5 proyectos)
 docs/                                → documentación del equipo (reglas del juego, contratos internos)
 .github/workflows/                   → pipeline de CI (secretos, build, pruebas y cobertura)
 .env.example                         → nombres de las variables de configuración, sin valores reales
+.dockerignore                        → contexto de la imagen de la API: solo sus tres proyectos de .NET
 src/
   BattleHub.Trivia.Api/              → backend .NET 10 (punto de entrada)
+    Dockerfile                       → imagen Docker de la API (se construye desde la raíz del repositorio)
     Controllers/                     → endpoints REST /api/games/trivia/...
     Hubs/                            → hub de SignalR /hubs/trivia
     Services/                        → lógica del juego (preguntas, puntajes, ganador) y notificación a Matchmaking
@@ -82,6 +84,25 @@ dotnet test tests/BattleHub.Trivia.IntegrationTests   # pruebas de integración 
 ```
 
 Las pruebas de integración usan SQL Server en un contenedor (Testcontainers, requiere Docker). Sin Docker se puede usar LocalDB definiendo antes `TRIVIA_TEST_CONNECTION='Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true'`.
+
+#### Docker
+
+`src/BattleHub.Trivia.Api/Dockerfile` tiene dos etapas: compila y publica la API con el SDK de .NET 10 y copia solo el resultado a la imagen de ASP.NET para Alpine, que corre sin root y escucha en el puerto 8080. La imagen incluye las bibliotecas ICU, porque SqlClient no funciona sin ellas, y no lleva ningún secreto: la configuración se pasa al ejecutar el contenedor.
+
+Como la API usa los proyectos Data y Domain, la imagen se construye desde la raíz del repositorio. El `.dockerignore` de la raíz deja pasar solo esos tres proyectos:
+
+```bash
+docker build --file src/BattleHub.Trivia.Api/Dockerfile --tag battlehub-trivia-api .
+docker run --rm -p 5185:8080 --env-file .env battlehub-trivia-api
+```
+
+La API queda en `http://localhost:5185`, el mismo puerto que con `dotnet run`. El archivo `.env` se crea copiando `.env.example` (ver [Configuración y secretos](#configuración-y-secretos)):
+
+- `Auth__PublicKey` es obligatoria: sin ella el contenedor no arranca.
+- `ConnectionStrings__Trivia` debe apuntar a un SQL Server con usuario y contraseña de SQL, que acepte conexiones TCP. LocalDB no funciona dentro de un contenedor Linux. Para usar el SQL Server de la propia máquina, el servidor es `host.docker.internal`, por ejemplo `Server=host.docker.internal,1433;Database=BattleHubTrivia;User Id=<usuario>;Password=<contraseña>;TrustServerCertificate=true`. En Linux hay que agregar `--add-host=host.docker.internal:host-gateway` al `docker run`.
+- Para que el contenedor aplique las migraciones y cargue las 30 preguntas al arrancar, se agregan `Database__MigrateOnStartup=true` y `Database__SeedQuestions=true`. Dentro del contenedor no se usa `launchSettings.json` y el entorno es *Production*, así que por defecto están en `false`.
+
+El job `backend-docker` del CI construye la imagen en cada pull request y la levanta junto a un SQL Server temporal, con una contraseña y una clave pública que se generan en el momento y no se guardan. Comprueba que `GET /health` responda `Healthy` y que la base tenga 5 migraciones, 30 preguntas y 120 opciones. El tamaño de la imagen se muestra en el resumen del job `backend-docker`.
 
 ### Frontend (Aurelia)
 
