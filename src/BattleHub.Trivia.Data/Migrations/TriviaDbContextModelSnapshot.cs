@@ -24,42 +24,71 @@ namespace BattleHub.Trivia.Data.Migrations
 
             modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.AnswerOptionRecord", b =>
                 {
-                    b.Property<string>("QuestionId")
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AnswerId")
+                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("AnswerId")
+                    b.Property<string>("QuestionId")
+                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid>("QuestionRefId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Text")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.HasKey("QuestionId", "AnswerId");
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuestionRefId");
+
+                    b.HasIndex("QuestionId", "AnswerId")
+                        .IsUnique();
 
                     b.ToTable("AnswerOptions", (string)null);
                 });
 
             modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.FinishNotificationRecord", b =>
                 {
-                    b.Property<string>("MatchId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("Attempts")
                         .HasColumnType("int");
 
-                    b.Property<bool>("Delivered")
-                        .HasColumnType("bit");
                     b.Property<bool>("Blocked")
                         .HasColumnType("bit");
+
+                    b.Property<bool>("Delivered")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MatchId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid>("MatchRefId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("NextAttemptAt")
                         .HasColumnType("datetimeoffset");
 
-                    b.HasKey("MatchId");
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchId")
+                        .IsUnique();
+
+                    b.HasIndex("MatchRefId")
+                        .IsUnique();
 
                     b.HasIndex("Delivered", "NextAttemptAt");
 
@@ -68,9 +97,9 @@ namespace BattleHub.Trivia.Data.Migrations
 
             modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.MatchResultRecord", b =>
                 {
-                    b.Property<string>("MatchId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("DecidedByTiebreak")
                         .HasColumnType("bit");
@@ -86,6 +115,11 @@ namespace BattleHub.Trivia.Data.Migrations
                     b.Property<bool>("IsTie")
                         .HasColumnType("bit");
 
+                    b.Property<string>("MatchId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("MetadataJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
@@ -98,7 +132,10 @@ namespace BattleHub.Trivia.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
-                    b.HasKey("MatchId");
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchId")
+                        .IsUnique();
 
                     b.ToTable("MatchResults", null, t =>
                         {
@@ -108,13 +145,9 @@ namespace BattleHub.Trivia.Data.Migrations
 
             modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.PlayerResultRecord", b =>
                 {
-                    b.Property<string>("MatchId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("UserId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("CorrectAnswers")
                         .HasColumnType("int");
@@ -127,24 +160,42 @@ namespace BattleHub.Trivia.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("MatchId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid>("MatchRefId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Position")
                         .HasColumnType("int");
 
                     b.Property<int>("Score")
                         .HasColumnType("int");
 
-                    b.HasKey("MatchId", "UserId");
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchRefId");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("MatchId", "UserId")
+                        .IsUnique();
 
                     b.ToTable("PlayerResults", (string)null);
                 });
 
             modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.QuestionRecord", b =>
                 {
-                    b.Property<string>("QuestionId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Category")
                         .HasMaxLength(100)
@@ -159,16 +210,24 @@ namespace BattleHub.Trivia.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("QuestionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("Text")
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.HasKey("QuestionId");
+                    b.HasKey("Id");
 
                     b.HasIndex("Category");
 
                     b.HasIndex("Difficulty");
+
+                    b.HasIndex("QuestionId")
+                        .IsUnique();
 
                     b.ToTable("Questions", (string)null);
                 });
@@ -177,7 +236,7 @@ namespace BattleHub.Trivia.Data.Migrations
                 {
                     b.HasOne("BattleHub.Trivia.Data.Persistence.QuestionRecord", "Question")
                         .WithMany("Options")
-                        .HasForeignKey("QuestionId")
+                        .HasForeignKey("QuestionRefId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -188,7 +247,7 @@ namespace BattleHub.Trivia.Data.Migrations
                 {
                     b.HasOne("BattleHub.Trivia.Data.Persistence.MatchResultRecord", null)
                         .WithOne()
-                        .HasForeignKey("BattleHub.Trivia.Data.Persistence.FinishNotificationRecord", "MatchId")
+                        .HasForeignKey("BattleHub.Trivia.Data.Persistence.FinishNotificationRecord", "MatchRefId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -197,7 +256,7 @@ namespace BattleHub.Trivia.Data.Migrations
                 {
                     b.HasOne("BattleHub.Trivia.Data.Persistence.MatchResultRecord", "Match")
                         .WithMany("Players")
-                        .HasForeignKey("MatchId")
+                        .HasForeignKey("MatchRefId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

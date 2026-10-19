@@ -2,6 +2,10 @@ namespace BattleHub.Trivia.Data.Persistence;
 
 public sealed class PlayerResultRecord
 {
+    public Guid Id { get; set; }
+
+    public Guid MatchRefId { get; set; }
+
     public string MatchId { get; set; } = "";
 
     public MatchResultRecord? Match { get; set; }

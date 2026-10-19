@@ -2,6 +2,8 @@ namespace BattleHub.Trivia.Data.Persistence;
 
 public sealed class MatchResultRecord
 {
+    public Guid Id { get; set; }
+
     public string MatchId { get; set; } = "";
 
     public string GameType { get; set; } = "trivia";
