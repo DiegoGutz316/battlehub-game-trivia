@@ -25,18 +25,20 @@ public sealed class TriviaDbContext(DbContextOptions<TriviaDbContext> options) :
         modelBuilder.Entity<FinishNotificationRecord>(entity =>
         {
             entity.ToTable("FinishNotifications");
-            entity.HasKey(item => item.MatchId);
+            entity.HasKey(item => item.Id);
             entity.Property(item => item.MatchId).HasMaxLength(64);
+            entity.HasIndex(item => item.MatchId).IsUnique();
             entity.HasIndex(item => new { item.Delivered, item.NextAttemptAt });
-            entity.HasOne<MatchResultRecord>().WithOne().HasForeignKey<FinishNotificationRecord>(item => item.MatchId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<MatchResultRecord>().WithOne().HasForeignKey<FinishNotificationRecord>(item => item.MatchRefId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<MatchResultRecord>(entity =>
         {
             entity.ToTable("MatchResults", table =>
                 table.HasCheckConstraint("CK_MatchResults_Metadata_IsJson", "ISJSON([Metadata]) = 1"));
 
-            entity.HasKey(match => match.MatchId);
+            entity.HasKey(match => match.Id);
             entity.Property(match => match.MatchId).HasMaxLength(64);
+            entity.HasIndex(match => match.MatchId).IsUnique();
             entity.Property(match => match.GameType).HasMaxLength(32).IsRequired();
             entity.Property(match => match.WinnerUserId).HasMaxLength(64);
             entity.Property(match => match.MetadataJson)
@@ -46,25 +48,27 @@ public sealed class TriviaDbContext(DbContextOptions<TriviaDbContext> options) :
 
             entity.HasMany(match => match.Players)
                 .WithOne(player => player.Match)
-                .HasForeignKey(player => player.MatchId)
+                .HasForeignKey(player => player.MatchRefId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PlayerResultRecord>(entity =>
         {
             entity.ToTable("PlayerResults");
-            entity.HasKey(player => new { player.MatchId, player.UserId });
+            entity.HasKey(player => player.Id);
             entity.Property(player => player.MatchId).HasMaxLength(64);
             entity.Property(player => player.UserId).HasMaxLength(64);
             entity.Property(player => player.DisplayName).HasMaxLength(100).IsRequired();
+            entity.HasIndex(player => new { player.MatchId, player.UserId }).IsUnique();
             entity.HasIndex(player => player.UserId);
         });
 
         modelBuilder.Entity<QuestionRecord>(entity =>
         {
             entity.ToTable("Questions");
-            entity.HasKey(question => question.QuestionId);
+            entity.HasKey(question => question.Id);
             entity.Property(question => question.QuestionId).HasMaxLength(64);
+            entity.HasIndex(question => question.QuestionId).IsUnique();
             entity.Property(question => question.Text).HasMaxLength(1000).IsRequired();
             entity.Property(question => question.Category).HasMaxLength(100);
             entity.Property(question => question.Difficulty).HasMaxLength(32);
@@ -74,16 +78,17 @@ public sealed class TriviaDbContext(DbContextOptions<TriviaDbContext> options) :
 
             entity.HasMany(question => question.Options)
                 .WithOne(option => option.Question)
-                .HasForeignKey(option => option.QuestionId)
+                .HasForeignKey(option => option.QuestionRefId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AnswerOptionRecord>(entity =>
         {
             entity.ToTable("AnswerOptions");
-            entity.HasKey(option => new { option.QuestionId, option.AnswerId });
+            entity.HasKey(option => option.Id);
             entity.Property(option => option.QuestionId).HasMaxLength(64);
             entity.Property(option => option.AnswerId).HasMaxLength(64);
+            entity.HasIndex(option => new { option.QuestionId, option.AnswerId }).IsUnique();
             entity.Property(option => option.Text).HasMaxLength(500).IsRequired();
         });
     }
