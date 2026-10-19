@@ -62,8 +62,9 @@ jobs:
         run: dotnet test tests/BattleHub.Trivia.IntegrationTests --no-build --collect:"XPlat Code Coverage" --results-directory coverage/raw
 
       - name: Coverage report
+        # Excluye el código que genera el compilador (*.g.cs, *.generated.cs), por ejemplo el de Microsoft.AspNetCore.OpenApi.
         run: |
-          dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend "-reporttypes:JsonSummary;MarkdownSummaryGithub"
+          dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend "-reporttypes:JsonSummary;MarkdownSummaryGithub" "-filefilters:-*.g.cs;-*.generated.cs"
           cat coverage/backend/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage summary
