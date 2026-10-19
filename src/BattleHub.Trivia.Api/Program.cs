@@ -1,6 +1,7 @@
 
 using BattleHub.Trivia.Data;
 using BattleHub.Trivia.Data.Context;
+using BattleHub.Trivia.Data.Seed;
 using BattleHub.Trivia.Domain.Services;
 using BattleHub.Trivia.Api.Auth;
 using BattleHub.Trivia.Api.Hubs;
@@ -72,21 +73,11 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 
     await db.Database.MigrateAsync();
 
-    if (app.Configuration.GetValue<bool>("Database:SeedQuestions")
-        && !await db.Questions.AnyAsync())
+    if (app.Configuration.GetValue<bool>("Database:SeedQuestions"))
     {
-        using var stream = typeof(Program).Assembly
-            .GetManifestResourceStream("QuestionBank.sql")!;
-
-        using var reader = new StreamReader(stream);
-
-        await using var transaction =
-            await db.Database.BeginTransactionAsync();
-
-        await db.Database.ExecuteSqlRawAsync(
-            await reader.ReadToEndAsync());
-
-        await transaction.CommitAsync();
+        await scope.ServiceProvider
+            .GetRequiredService<QuestionSeeder>()
+            .SeedAsync();
     }
 }
 

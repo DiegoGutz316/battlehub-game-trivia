@@ -1,5 +1,6 @@
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Data.Repositories;
+using BattleHub.Trivia.Data.Seed;
 using BattleHub.Trivia.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -25,6 +26,7 @@ public static class DependencyInjection
 
         services.AddScoped<IResultRepository, ResultRepository>();
         services.AddScoped<IQuestionRepository, QuestionRepository>();
+        services.AddScoped<QuestionSeeder>();
 
         return services;
     }

@@ -104,15 +104,19 @@ Los JWT locales de Trivia no son aceptados automáticamente por Matchmaking. Est
 
 El proyecto utiliza .NET 10 y SQL Server.
 
+Antes de la primera ejecución debe configurarse `Auth:PublicKey`, como se explica en [Autenticación de Trivia](#autenticación-de-trivia). Es una clave pública, no un secreto; sin ella la API no arranca.
+
 Desde la raíz del repositorio:
 
 ```powershell
 dotnet run --project src/BattleHub.Trivia.Api
 ```
 
-Antes de iniciar, deben configurarse la conexión a la base de datos y los valores de autenticación requeridos.
+Este comando usa el perfil `http` de `launchSettings.json`, con el entorno Development. En ese perfil, `Database:MigrateOnStartup` y `Database:SeedQuestions` están activados: la API aplica las migraciones y carga las 30 preguntas iniciales mediante `QuestionSeeder`, sin scripts. Si la base de datos no existe, la crea; si ya tiene preguntas, no las vuelve a cargar.
 
-La aplicación permite configurar la ejecución de migraciones y la carga inicial de preguntas mediante `Database:MigrateOnStartup` y `Database:SeedQuestions`.
+Por defecto se usa la base LocalDB `BattleHubTrivia`. Para usar otra base se configura `ConnectionStrings:Trivia`.
+
+Fuera de Development, o al iniciar con `--no-launch-profile`, ambos valores están en `false` (`appsettings.json`) y deben activarse por configuración o variable de entorno.
 
 ## Pruebas de integración
 
