@@ -22,7 +22,8 @@ Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://git
 ```text
 BattleHub.Trivia.slnx                → solución .NET (agrupa los 5 proyectos)
 docs/                                → documentación del equipo (reglas del juego, contratos internos)
-.github/workflows/                   → pipeline de CI (build + pruebas unitarias + pruebas de integración)
+.github/workflows/                   → pipeline de CI (secretos, build, pruebas y cobertura)
+.env.example                         → nombres de las variables de configuración, sin valores reales
 src/
   BattleHub.Trivia.Api/              → backend .NET 10 (punto de entrada)
     Controllers/                     → endpoints REST /api/games/trivia/...
@@ -155,3 +156,31 @@ dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -target
 npx jest
 # abrir coverage/lcov-report/index.html
 ```
+
+## Configuración y secretos
+
+Ningún valor sensible (contraseñas, Client Secret, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles.
+
+| Clave en `appsettings.json` | Variable de entorno | ¿Sensible? | Dónde va |
+|---|---|---|---|
+| `ConnectionStrings:Trivia` | `ConnectionStrings__Trivia` | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno |
+| `Matchmaking:Auth0:ClientSecret` | `Matchmaking__Auth0__ClientSecret` | **Sí** | Local: user-secrets. Docker o servidor: variable de entorno |
+| `Auth:Domain`, `Auth:Audience`, `Matchmaking:Auth0:Domain`, `Matchmaking:Auth0:Audience`, `Matchmaking:Auth0:ClientId` | `Auth__Domain`, etc. | No: identificadores públicos de Auth0 | `appsettings.json` |
+| `Matchmaking:BaseUrl`, `Cors:Origins`, `Database:MigrateOnStartup`, `Database:SeedQuestions` | `Matchmaking__BaseUrl`, `Cors__Origins__0`, etc. | No | `appsettings.json`; se reemplazan por variable de entorno según el ambiente |
+| `TRIVIA_API_URL` (frontend) | `TRIVIA_API_URL` | No | Variable de entorno antes de `npm start` o `npm run build` |
+
+**En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno *Development*:
+
+```bash
+# Desde la raíz del repositorio
+dotnet user-secrets set "ConnectionStrings:Trivia" "Server=...;Database=BattleHubTrivia;..." --project src/BattleHub.Trivia.Api
+dotnet user-secrets list --project src/BattleHub.Trivia.Api
+```
+
+Para el Client Secret conviene usar `scripts/Set-MatchmakingCredentials.ps1`, que lo pide de forma oculta: así no queda en el historial de la terminal.
+
+**En Docker o en un servidor**, copiar `.env.example` como `.env` (ignorado por git), completarlo ahí y pasarlo con `docker run --env-file .env ...`, o usar la configuración de secretos del servidor.
+
+**Revisión automática:** el job `secrets` del CI ejecuta [gitleaks](https://github.com/gitleaks/gitleaks) sobre todo el historial en cada pull request y en cada push a `main`. Si encuentra un secreto, el job falla y el PR no se puede mergear. Para revisarlo antes de subir cambios: `gitleaks git .` desde la raíz del repositorio.
+
+**Si se sube un secreto por error**, hay que considerarlo expuesto: borrarlo del código no alcanza, porque sigue en el historial. Hay que cambiarlo de inmediato (por ejemplo, generar un Client Secret nuevo en Auth0) y avisar al equipo. Si gitleaks marca algo que no es un secreto, se agrega su *fingerprint* a `.gitleaksignore`, explicando el motivo en el PR.
