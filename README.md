@@ -57,12 +57,14 @@ tests/
 
 Requisito: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
 
-Antes del primer `dotnet run` hay que configurar `Auth:PublicKey`, la clave pública con la que la API valida los tokens. Es una clave pública, no un secreto. Cómo configurarla se explica en [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md#autenticación-de-trivia). Sin esa clave la API no arranca. Por ejemplo, con user-secrets:
+La API acepta el token de la sesión del Shell: valida su firma con las claves que publica el emisor, sin claves configuradas a mano (ver [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md#autenticación-de-trivia)). Para avisar el fin de partida a Matchmaking necesita el secreto de su cliente de servicio, que se guarda con user-secrets:
 
 ```bash
 # Desde la raíz del repositorio
-dotnet user-secrets set "Auth:PublicKey" "<clave pública en Base64>" --project src/BattleHub.Trivia.Api
+dotnet user-secrets set "Matchmaking:ClientSecret" "<secreto del cliente de servicio de Trivia>" --project src/BattleHub.Trivia.Api
 ```
+
+Sin ese secreto la API arranca y se puede jugar, pero el fin de partida queda pendiente de avisar a Matchmaking hasta que se configure.
 
 Desde la raíz del repositorio (donde está `BattleHub.Trivia.slnx`):
 
@@ -98,11 +100,11 @@ docker run --rm -p 5185:8080 --env-file .env battlehub-trivia-api
 
 La API queda en `http://localhost:5185`, el mismo puerto que con `dotnet run`. El archivo `.env` se crea copiando `.env.example` (ver [Configuración y secretos](#configuración-y-secretos)):
 
-- `Auth__PublicKey` es obligatoria: sin ella el contenedor no arranca.
+- `Matchmaking__ClientSecret` es necesaria para avisar el fin de partida a Matchmaking.
 - `ConnectionStrings__Trivia` debe apuntar a un SQL Server con usuario y contraseña de SQL, que acepte conexiones TCP. LocalDB no funciona dentro de un contenedor Linux. Para usar el SQL Server de la propia máquina, el servidor es `host.docker.internal`, por ejemplo `Server=host.docker.internal,1433;Database=BattleHubTrivia;User Id=<usuario>;Password=<contraseña>;TrustServerCertificate=true`. En Linux hay que agregar `--add-host=host.docker.internal:host-gateway` al `docker run`.
 - Para que el contenedor aplique las migraciones y cargue las 30 preguntas al arrancar, se agregan `Database__MigrateOnStartup=true` y `Database__SeedQuestions=true`. Dentro del contenedor no se usa `launchSettings.json` y el entorno es *Production*, así que por defecto están en `false`.
 
-El job `backend-docker` del CI construye la imagen en cada pull request y la levanta junto a un SQL Server temporal, con una contraseña y una clave pública que se generan en el momento y no se guardan. Comprueba que `GET /health` responda `Healthy` y que la base tenga 5 migraciones, 30 preguntas y 120 opciones. El tamaño de la imagen se muestra en el resumen del job `backend-docker`.
+El job `backend-docker` del CI construye la imagen en cada pull request y la levanta junto a un SQL Server temporal, con una contraseña que se genera en el momento y no se guarda. Comprueba que `GET /health` responda `Healthy` y que la base tenga 5 migraciones, 30 preguntas y 120 opciones. El tamaño de la imagen se muestra en el resumen del job `backend-docker`.
 
 ### Frontend (Aurelia)
 
@@ -208,15 +210,15 @@ npx jest
 
 Ningún valor sensible (contraseñas, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles.
 
-| Clave en `appsettings.json`                           | Variable de entorno                                     | ¿Sensible?                          | Dónde va                                                                                                                                                                                                      |
-| ----------------------------------------------------- | ------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ConnectionStrings:Trivia`                            | `ConnectionStrings__Trivia`                             | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                                                                                                               |
-| `Matchmaking:ServiceToken`                            | `Matchmaking__ServiceToken`                             | **Sí**                              | Local: user-secrets. Docker o servidor: variable de entorno                                                                                                                                                   |
-| `Auth:Issuer`, `Auth:Audience`                        | `Auth__Issuer`, `Auth__Audience`                        | No                                  | `appsettings.json`; se pueden reemplazar según el ambiente                                                                                                                                                    |
-| `Auth:PublicKey`                                      | `Auth__PublicKey`                                       | No, es una clave pública            | Local: user-secrets o configuración del entorno. Nunca incluir la clave privada                                                                                                                               |
-| `Matchmaking:BaseUrl`, `Cors:Origins`                 | `Matchmaking__BaseUrl`, `Cors__Origins__0`, etc.        | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                                                                                                                   |
-| `Database:MigrateOnStartup`, `Database:SeedQuestions` | `Database__MigrateOnStartup`, `Database__SeedQuestions` | No                                  | `false` en `appsettings.json` y `true` en el perfil de desarrollo (`launchSettings.json`). Fuera de _Development_, o con `dotnet run --no-launch-profile`, se activan por configuración o variable de entorno |
-| `TRIVIA_API_URL` (frontend)                           | `TRIVIA_API_URL`                                        | No                                  | Variable de entorno antes de `npm start` o `npm run build`                                                                                                                                                    |
+| Clave en `appsettings.json`                                                 | Variable de entorno                                                  | ¿Sensible?                          | Dónde va                                                                                                                                                                                                      |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionStrings:Trivia`                                                  | `ConnectionStrings__Trivia`                                          | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                                                                                                               |
+| `Matchmaking:ClientSecret`                                                  | `Matchmaking__ClientSecret`                                          | **Sí**                              | Local: user-secrets. Docker o servidor: variable de entorno                                                                                                                                                   |
+| `Auth:Issuer`, `Auth:Audience`                                              | `Auth__Issuer`, `Auth__Audience`                                     | No                                  | `appsettings.json`: emisor y audiencia del token de sesión del Shell, acordados con Shell                                                                                                                     |
+| `Matchmaking:TokenEndpoint`, `Matchmaking:Audience`, `Matchmaking:ClientId` | `Matchmaking__TokenEndpoint`, etc.                                   | No: identificadores públicos        | `appsettings.json`: cliente de servicio de Trivia para avisar el fin de partida                                                                                                                               |
+| `Matchmaking:BaseUrl`, `Profile:BaseUrl`, `Cors:Origins`                    | `Matchmaking__BaseUrl`, `Profile__BaseUrl`, `Cors__Origins__0`, etc. | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                                                                                                                   |
+| `Database:MigrateOnStartup`, `Database:SeedQuestions`                       | `Database__MigrateOnStartup`, `Database__SeedQuestions`              | No                                  | `false` en `appsettings.json` y `true` en el perfil de desarrollo (`launchSettings.json`). Fuera de _Development_, o con `dotnet run --no-launch-profile`, se activan por configuración o variable de entorno |
+| `TRIVIA_API_URL` (frontend)                                                 | `TRIVIA_API_URL`                                                     | No                                  | Variable de entorno antes de `npm start` o `npm run build`                                                                                                                                                    |
 
 **En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno _Development_:
 

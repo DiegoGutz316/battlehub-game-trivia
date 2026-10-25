@@ -6,6 +6,7 @@ using BattleHub.Trivia.Domain.Services;
 using BattleHub.Trivia.Api.Auth;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Api.Matchmaking;
+using BattleHub.Trivia.Api.Profiles;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,16 +42,30 @@ builder.Services.AddSingleton<TriviaGameService>();
 builder.Services.AddSingleton<TriviaSessions>();
 builder.Services.AddSingleton<PracticeSessions>();
 builder.Services.AddHostedService<PracticeWorker>();
-builder.Services.AddSingleton<IMatchmakingTokenProvider, ConfiguredMatchmakingTokenProvider>();
+foreach (var name in new[] { "Matchmaking", "ServiceToken", "Profile" })
+{
+    builder.Services.AddHttpClient(
+        name,
+        client => client.Timeout = TimeSpan.FromSeconds(5))
+        .ConfigurePrimaryHttpMessageHandler(() =>
+            new HttpClientHandler
+            {
+                AllowAutoRedirect = false
+            });
+}
 
-builder.Services.AddHttpClient(
-    "Matchmaking",
-    client => client.Timeout = TimeSpan.FromSeconds(5))
-    .ConfigurePrimaryHttpMessageHandler(() =>
-        new HttpClientHandler
-        {
-            AllowAutoRedirect = false
-        });
+builder.Services.AddSingleton<IMatchmakingTokenProvider>(services =>
+    new ClientCredentialsTokenProvider(
+        services.GetRequiredService<IHttpClientFactory>()
+            .CreateClient("ServiceToken"),
+        builder.Configuration,
+        services.GetRequiredService<TimeProvider>()));
+
+builder.Services.AddSingleton<IProfileGateway>(services =>
+    new ProfileGateway(
+        services.GetRequiredService<IHttpClientFactory>()
+            .CreateClient("Profile"),
+        builder.Configuration));
 
 builder.Services.AddSingleton<IMatchmakingGateway>(services =>
     new MatchmakingGateway(

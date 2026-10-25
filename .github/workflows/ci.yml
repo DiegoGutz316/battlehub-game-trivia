@@ -153,11 +153,6 @@ jobs:
           sql_password="Tv7-$(openssl rand -hex 16)"
           echo "::add-mask::$sql_password"
 
-          # Clave pública temporal: no se guarda en el repositorio y la privada se borra al instante.
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$RUNNER_TEMP/ci-key.pem"
-          public_key="$(openssl pkey -in "$RUNNER_TEMP/ci-key.pem" -pubout -outform DER | base64 --wrap=0)"
-          rm "$RUNNER_TEMP/ci-key.pem"
-
           docker network create trivia-net
           docker run --detach --name trivia-sql --network trivia-net \
             --env ACCEPT_EULA=Y --env MSSQL_SA_PASSWORD="$sql_password" \
@@ -174,8 +169,8 @@ jobs:
           done
           query -Q "SELECT 1" > /dev/null
 
+          # El emisor y la audiencia de los tokens vienen de appsettings.json; las claves se descargan del emisor al validar un token.
           docker run --detach --name trivia-api --network trivia-net --publish 5185:8080 \
-            --env Auth__PublicKey="$public_key" \
             --env ConnectionStrings__Trivia="Server=trivia-sql,1433;Database=BattleHubTrivia;User Id=sa;Password=$sql_password;TrustServerCertificate=true" \
             --env Database__MigrateOnStartup=true --env Database__SeedQuestions=true \
             battlehub-trivia-api:ci

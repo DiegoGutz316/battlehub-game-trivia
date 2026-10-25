@@ -2,9 +2,13 @@
 using System.Security.Claims;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Api.Matchmaking;
+using BattleHub.Trivia.Api.Profiles;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Interfaces;
 using BattleHub.Trivia.Domain.Services;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Connections.Features;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,6 +37,67 @@ public sealed class TriviaHubTests
              "TestAuth"));
     }
 
+    private static IProfileGateway AllowedProfiles()
+    {
+        var profiles = Substitute.For<IProfileGateway>();
+
+        profiles
+            .CanPlayAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        return profiles;
+    }
+
+    private sealed class HttpFeature(HttpContext http) : IHttpContextFeature
+    {
+        public HttpContext? HttpContext { get; set; } = http;
+    }
+
+    [Fact]
+    public async Task JoinMatchRejectsPlayerWithoutTriviaPermission()
+    {
+        using var services = new ServiceCollection()
+            .BuildServiceProvider();
+
+        var sessions = CreateSessions(
+            services.GetRequiredService<IServiceScopeFactory>());
+
+        var matchmaking = Substitute.For<IMatchmakingGateway>();
+        var profiles = Substitute.For<IProfileGateway>();
+        var context = Substitute.For<HubCallerContext>();
+
+        var http = new DefaultHttpContext();
+        http.Request.Headers.Authorization = "Bearer shell-token";
+
+        var features = new FeatureCollection();
+        features.Set<IHttpContextFeature>(new HttpFeature(http));
+
+        context.Items.Returns(new Dictionary<object, object?>());
+        context.User.Returns(CreateUser("player-one"));
+        context.Features.Returns(features);
+
+        profiles
+            .CanPlayAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        var hub = new TriviaHub(sessions, matchmaking, profiles)
+        {
+            Context = context
+        };
+
+        var exception = await Assert.ThrowsAsync<HubException>(
+            () => hub.JoinMatch(new JoinRequest("match-one", "room-token")));
+
+        Assert.Equal("PERMISSION_DENIED", exception.Message);
+
+        await profiles.Received(1).CanPlayAsync(
+            "shell-token",
+            Arg.Any<CancellationToken>());
+
+        await matchmaking.DidNotReceiveWithAnyArgs()
+            .ValidateAsync(default!, default!, default!, default);
+    }
+
     [Fact]
     public async Task SubmitAnswerRejectsPlayerWithoutMatch()
     {
@@ -47,7 +112,7 @@ public sealed class TriviaHubTests
 
         context.Items.Returns(new Dictionary<object, object?>());
 
-        var hub = new TriviaHub(sessions, matchmaking)
+        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
         {
             Context = context
         };
@@ -78,7 +143,7 @@ public sealed class TriviaHubTests
                 ["room"] = "match-one"
             });
 
-        var hub = new TriviaHub(sessions, matchmaking)
+        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
         {
             Context = context
         };
@@ -109,7 +174,7 @@ public sealed class TriviaHubTests
                 ["room"] = "match-one"
             });
 
-        var hub = new TriviaHub(sessions, matchmaking)
+        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
         {
             Context = context
         };
@@ -149,7 +214,7 @@ public sealed class TriviaHubTests
             .Returns(Task.FromException<MatchRoom>(
                 new HubException("MATCH_NOT_FOUND")));
 
-        var hub = new TriviaHub(sessions, matchmaking)
+        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
         {
             Context = context
         };
@@ -175,7 +240,7 @@ public sealed class TriviaHubTests
 
         context.Items.Returns(new Dictionary<object, object?>());
 
-        var hub = new TriviaHub(sessions, matchmaking)
+        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
         {
             Context = context
         };
@@ -265,7 +330,7 @@ public sealed class TriviaHubTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(room));
 
-        var hub = new TriviaHub(sessions, matchmaking)
+        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
         {
             Context = context,
             Groups = groups
@@ -361,7 +426,7 @@ public async Task JoinMatchRemovesPlayerFromGroupWhenSessionFails()
             Arg.Any<CancellationToken>())
         .Returns(Task.FromResult(room));
 
-    var hub = new TriviaHub(sessions, matchmaking)
+    var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
     {
         Context = context,
         Groups = groups
