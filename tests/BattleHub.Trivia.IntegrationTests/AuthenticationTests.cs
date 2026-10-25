@@ -1,8 +1,12 @@
 ﻿using System.Net;
 using System.Net.Http.Headers;
+using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Data.Repositories;
 using BattleHub.Trivia.Domain.Entities;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,7 +26,8 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = scenario == "anonymous" ? null : new AuthenticationHeaderValue("Bearer", factory.Token(
             "player-one", issuer: scenario == "issuer" ? "https://wrong.example/" : TriviaApiFactory.Issuer,
-            audience: scenario == "audience" ? "https://api.battlehub.local/profile" : TriviaApiFactory.Audience,
+            // La audiencia propia de Trivia ya no se acepta: el Shell entrega la audiencia de la plataforma.
+            audience: scenario == "audience" ? "https://api.battlehub.local/trivia" : TriviaApiFactory.Audience,
             expires: scenario == "expired" ? DateTime.UtcNow.AddMinutes(-2) : null));
         if (scenario == "signature")
         {
@@ -41,6 +46,29 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/hubs/trivia/negotiate?negotiateVersion=1", null)).StatusCode);
         client.DefaultRequestHeaders.Authorization = new("Bearer", factory.Token("player-one", writer: false));
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/hubs/trivia/negotiate?negotiateVersion=1", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task PlayerWithoutTriviaPermissionCannotJoinMatch()
+    {
+        await using var connection = new HubConnectionBuilder().WithUrl("http://localhost/hubs/trivia", options =>
+        {
+            options.Transports = HttpTransportType.LongPolling;
+            options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+            options.AccessTokenProvider = () => Task.FromResult<string?>(factory.Token(TriviaApiFactory.NoPermissionUser, writer: false));
+        }).Build();
+        await connection.StartAsync();
+        var error = await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync("JoinMatch", new JoinRequest("room", "room-token")));
+        Assert.Contains("PERMISSION_DENIED", error.Message);
+    }
+
+    [Fact]
+    public async Task ServiceTokenWithoutWriteScopeCannotWriteResultsOrPlay()
+    {
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", factory.Token("trivia-service@clients", writer: false));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/api/games/trivia/results", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/hubs/trivia/negotiate?negotiateVersion=1", null)).StatusCode);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using BattleHub.Trivia.Api.Matchmaking;
+using BattleHub.Trivia.Api.Profiles;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Data.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,6 +17,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 using Testcontainers.MsSql;
@@ -79,10 +82,28 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
         return rooms;
     }
 
+    // Profile: todos tienen games.trivia.play salvo NoPermissionUser.
+    private static IProfileGateway CreateProfiles()
+    {
+        var profiles = Substitute.For<IProfileGateway>();
+
+        profiles
+            .CanPlayAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(
+                new JwtSecurityTokenHandler()
+                    .ReadJwtToken(call.ArgAt<string>(0))
+                    .Subject != NoPermissionUser));
+
+        return profiles;
+    }
+
     public TestClock Clock { get; } = new();
 
-    public const string Issuer = "battlehub-trivia";
-    public const string Audience = "battlehub-trivia-api";
+    public const string NoPermissionUser = "player-without-permission";
+
+    // Emisor y audiencia acordados con Shell (los mismos de appsettings.json).
+    public const string Issuer = "https://dev-jaii1peslxnejq0y.us.auth0.com/";
+    public const string Audience = "https://api.battlehub.local/profile";
 
     private readonly RSA rsa = RSA.Create(2048);
 
@@ -215,15 +236,6 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
     {
         builder.UseEnvironment("Testing");
 
-        builder.UseSetting("Auth:Issuer", Issuer);
-
-        builder.UseSetting("Auth:Audience", Audience);
-
-        builder.UseSetting(
-            "Auth:PublicKey",
-            Convert.ToBase64String(
-                rsa.ExportSubjectPublicKeyInfo()));
-
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IHostedService>();
@@ -234,6 +246,10 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
             services.RemoveAll<IMatchmakingGateway>();
             services.AddSingleton<IMatchmakingGateway>(
                 CreateRooms());
+
+            services.RemoveAll<IProfileGateway>();
+            services.AddSingleton<IProfileGateway>(
+                CreateProfiles());
 
             services.RemoveAll<DbContextOptions<TriviaDbContext>>();
             services.RemoveAll<TriviaDbContext>();
@@ -247,17 +263,21 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
                 JwtBearerDefaults.AuthenticationScheme,
                 jwt =>
                 {
-                    jwt.Authority = null;
-                    jwt.ConfigurationManager = null;
+                    // Reemplaza la descarga de claves del emisor por la clave de prueba, sin red.
+                    var configuration = new OpenIdConnectConfiguration
+                    {
+                        Issuer = Issuer
+                    };
 
-                    jwt.TokenValidationParameters.ValidIssuer = Issuer;
-                    jwt.TokenValidationParameters.ValidAudience = Audience;
-
-                    jwt.TokenValidationParameters.IssuerSigningKey =
+                    configuration.SigningKeys.Add(
                         new RsaSecurityKey(rsa.ExportParameters(false))
                         {
                             KeyId = "test-rsa"
-                        };
+                        });
+
+                    jwt.ConfigurationManager =
+                        new StaticConfigurationManager<OpenIdConnectConfiguration>(
+                            configuration);
                 });
         });
     }

@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using System.Security.Cryptography;
 
 namespace BattleHub.Trivia.Api.Auth;
 
@@ -16,36 +15,37 @@ public static class TriviaAuth
         || user.FindFirst("scope")?.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(permission) == true;
     public static bool IsWriter(ClaimsPrincipal user) => IsMachine(user) && HasPermission(user, "games.trivia.results.write");
 
+    // Token con el que se autenticó la petición o la conexión al hub (el navegador lo envía en access_token).
+    public static string AccessToken(HttpContext? http)
+    {
+        if (http is null) return "";
+        var header = http.Request.Headers.Authorization.ToString();
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return header["Bearer ".Length..].Trim();
+        return http.Request.Path.StartsWithSegments("/hubs/trivia") ? http.Request.Query["access_token"].ToString() : "";
+    }
+
     public static IServiceCollection AddTriviaAuth(
     this IServiceCollection services,
     IConfiguration config)
 {
     var issuer = config["Auth:Issuer"];
     var audience = config["Auth:Audience"];
-    var publicKey = config["Auth:PublicKey"];
 
-    if (string.IsNullOrWhiteSpace(issuer) ||
-        string.IsNullOrWhiteSpace(audience) ||
-        string.IsNullOrWhiteSpace(publicKey))
+    if (!Uri.TryCreate(issuer, UriKind.Absolute, out var issuerUri) ||
+        issuerUri.Scheme != Uri.UriSchemeHttps ||
+        string.IsNullOrWhiteSpace(audience))
     {
         throw new InvalidOperationException(
-            "Configurar Auth:Issuer, Auth:Audience y Auth:PublicKey.");
+            "Configurar Auth:Issuer (URL https del emisor de los tokens del Shell) y Auth:Audience.");
     }
-
-    RSA rsa = RSA.Create();
-
-    try
-    {
-        rsa.ImportSubjectPublicKeyInfo(
-            Convert.FromBase64String(publicKey),
-            out _);
-
-        var signingKey = new RsaSecurityKey(rsa.ExportParameters(false));
 
         services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(jwt =>
             {
+                // Las claves de firma se descargan del emisor (OpenID Connect discovery)
+                // y se vuelven a descargar cuando el emisor las rota.
+                jwt.Authority = issuer;
                 jwt.MapInboundClaims = false;
 
                 jwt.TokenValidationParameters = new TokenValidationParameters
@@ -58,8 +58,6 @@ public static class TriviaAuth
 
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-
-                    IssuerSigningKey = signingKey,
 
                     ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
 
@@ -80,11 +78,6 @@ public static class TriviaAuth
                     }
                 };
             });
-    }
-    finally
-    {
-        rsa.Dispose();
-    }
 
     services.AddAuthorization(options =>
     {
