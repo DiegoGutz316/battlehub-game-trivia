@@ -4,6 +4,7 @@ import './game-module.css';
 import type { GameContext, GameModule as IGameModule } from './contracts/game-contracts';
 import type { TriviaHubClient, Unsubscribe } from './services/trivia-hub/trivia-hub-client';
 import { SignalRTriviaClient } from './services/trivia-hub/signalr-trivia-client';
+import { PracticeTriviaClient } from './services/trivia-hub/practice-trivia-client';
 import { ServerClock } from './services/trivia-hub/server-clock';
 import type { GamePhase, Player, Question, QuestionClosedEvent, GameFinishedEvent } from './services/trivia-hub/contract';
 
@@ -27,7 +28,11 @@ export class GameModule implements IGameModule {
   public seconds = 0;
   public connection = 'disconnected';
   public error = '';
+  /** Abierto sin el Shell (sin tokens): ofrece el modo práctica en lugar de una partida real. */
   public preview = false;
+  /** Partida de práctica en curso: un solo jugador, no se guarda en el historial. */
+  public practice = false;
+  public connecting = false;
   public loadingHistory = false;
   public history: HistoryItem[] = [];
   public statistics: Statistics | null = null;
@@ -35,7 +40,6 @@ export class GameModule implements IGameModule {
   private readonly clock = new ServerClock();
   private subscriptions: Unsubscribe[] = [];
   private timer?: ReturnType<typeof setInterval>;
-  private connecting = false;
   private joined = false;
   private readonly abort = new AbortController();
 
@@ -54,6 +58,7 @@ export class GameModule implements IGameModule {
   private async join(): Promise<void> {
     const context = this.context;
     if (!context || !this.live()) return;
+    if (this.practice) { await this.client!.joinMatch({ matchId: context.matchId }); this.joined = true; return; }
     const token = await context.getMatchmakingAccessToken!();
     if (!this.live()) return;
     await this.client!.joinMatch({ matchId: context.matchId, matchmakingAccessToken: token });
@@ -88,7 +93,9 @@ export class GameModule implements IGameModule {
       client.onConnectionStateChanged(state => {
         this.connection = state;
         if (state === 'connected' && this.joined && this.live()) void this.join().catch(() => {
-          if (this.live()) this.error = 'No se pudo recuperar la partida. Reabre el juego desde Salas.';
+          if (this.live()) this.error = this.practice
+            ? 'No se pudo recuperar la práctica. Empieza una nueva.'
+            : 'No se pudo recuperar la partida. Reabre el juego desde Salas.';
         });
       }),
     ];
@@ -105,8 +112,30 @@ export class GameModule implements IGameModule {
     if (this.connecting) return;
     if (this.preview) { this.state = 'running'; return; }
     if (this.client) { this.state = 'running'; return; }
+    await this.connect(new SignalRTriviaClient(apiUrl, this.context.getAccessToken!));
+  }
+  /** Sin el Shell: juega una partida de práctica de un solo jugador con las mismas pantallas. */
+  public async startPractice(): Promise<void> {
+    if (!this.preview || !this.context || this.connecting || (this.state !== 'initialized' && this.state !== 'running')) return;
+    await this.leave();
+    this.phase = 'waiting'; this.players = []; this.question = null; this.review = null; this.result = null;
+    this.selectedAnswerId = null; this.answered = false; this.submitting = false; this.seconds = 0; this.error = '';
+    this.connection = 'disconnected'; this.practice = true;
+    try { await this.connect(new PracticeTriviaClient(apiUrl, this.context.currentUser)); }
+    catch (error) {
+      if (!this.live()) return;
+      this.practice = false;
+      this.error = error instanceof Error ? error.message : 'No se pudo iniciar la práctica.';
+    }
+  }
+  private async leave(): Promise<void> {
+    clearInterval(this.timer); this.timer = undefined; this.joined = false;
+    this.subscriptions.forEach(off => off()); this.subscriptions = [];
+    const client = this.client; this.client = undefined;
+    await client?.disconnect();
+  }
+  private async connect(client: TriviaHubClient): Promise<void> {
     this.connecting = true;
-    const client = new SignalRTriviaClient(apiUrl, this.context.getAccessToken!);
     this.client = client;
     this.subscribe(client);
     try {

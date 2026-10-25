@@ -349,8 +349,8 @@ describe('historial', () => {
   });
 });
 
-describe('vista previa sin tokens', () => {
-  it('start() queda en running sin conectarse al hub y muestra el aviso', async () => {
+describe('sin el Shell (sin tokens)', () => {
+  it('start() queda en running sin conectarse al hub y ofrece el modo práctica', async () => {
     const fixture = await createFixture('<trivia-game-module component.ref="game"></trivia-game-module>', class { public game!: GameModule; }, [GameModule]).started;
     const game = fixture.component.game;
     await game.initialize(preview);
@@ -360,7 +360,9 @@ describe('vista previa sin tokens', () => {
     expect(game.preview).toBe(true);
     expect(game.state).toBe('running');
     expect(SignalRTriviaClient).not.toHaveBeenCalled();
-    expect(fixture.appHost.textContent).toContain('Vista previa');
+    expect(fixture.appHost.textContent).toContain('Jugar en modo práctica');
+    expect(fixture.appHost.textContent).not.toContain('Vista previa');
+    expect(fixture.appHost.textContent).not.toContain('Preparando la partida');
     expect(fixture.appHost.textContent).not.toContain('Conexión:');
     await game.dispose();
   });

@@ -4,13 +4,19 @@
       <div><p class="trivia-game-eyebrow">BATTLEHUB · TRIVIA</p><h1>Trivia Battle</h1></div>
       <div><span data-testid="player-name">${context.currentUser.displayName}</span><small data-testid="match-id">${context.matchId}</small><small data-testid="game-state">${state}</small></div>
     </header>
-    <p if.bind="preview" class="trivia-game-notice">Vista previa. Para jugar una partida real, abre Trivia desde las salas del Shell.</p>
+    <p if.bind="practice" class="trivia-game-practice" data-testid="practice-badge">Modo práctica · Juegas solo y esta partida no se guarda en tu historial ni en tus estadísticas.</p>
     <p if.bind="error" class="trivia-game-error" role="alert">${error}</p>
-    <p if.bind="state === 'paused'" class="trivia-game-notice">La vista está pausada. La partida compartida continúa en el servidor.</p>
-    <p if.bind="!preview && connection !== 'connected'" class="trivia-game-notice" aria-live="polite">Conexión: ${connection}. Las respuestas se habilitarán cuando estés conectado.</p>
+    <p if.bind="state === 'paused'" class="trivia-game-notice">La vista está pausada. ${practice ? 'La práctica' : 'La partida compartida'} continúa en el servidor.</p>
+    <p if.bind="(!preview || practice) && connection !== 'connected'" class="trivia-game-notice" aria-live="polite">Conexión: ${connection}. Las respuestas se habilitarán cuando estés conectado.</p>
     <div class="trivia-game-layout">
       <main class="trivia-game-panel">
-        <div if.bind="phase === 'waiting'"><h2>Preparando la partida</h2><p>Esperamos a los jugadores. Diez preguntas, cuatro opciones y quince segundos para responder.</p></div>
+        <div if.bind="preview && !practice" data-testid="practice-offer">
+          <h2>Modo práctica</h2>
+          <p>Juega solo, sin el Shell: diez preguntas, cuatro opciones y quince segundos para responder. Para jugar contra otras personas, abre Trivia desde las salas del Shell.</p>
+          <button type="button" class="trivia-game-primary" click.trigger="startPractice()"
+            disabled.bind="connecting || (state !== 'initialized' && state !== 'running')">${connecting ? 'Conectando…' : 'Jugar en modo práctica'}</button>
+        </div>
+        <div if.bind="phase === 'waiting' && (!preview || practice)"><h2>${practice ? 'Preparando la práctica' : 'Preparando la partida'}</h2><p>${practice ? 'Cargando las preguntas.' : 'Esperamos a los jugadores.'} Diez preguntas, cuatro opciones y quince segundos para responder.</p></div>
         <div if.bind="question && phase !== 'finished'">
           <div class="trivia-game-question-meta"><span>Pregunta ${question.questionNumber} de ${question.totalQuestions} · ${question.category}</span><strong>${phase === 'playing' ? seconds + ' s' : 'Revisión'}</strong></div>
           <h2>${question.text}</h2>
@@ -22,7 +28,12 @@
           <p if.bind="answered && phase === 'playing'" aria-live="polite">Respuesta recibida. Espera el resultado de la ronda.</p>
           <p if.bind="review" aria-live="polite">${review.isCorrect ? '¡Correcto!' : 'Ronda cerrada.'} +${review.pointsEarned} puntos · Total: ${review.totalScore}</p>
         </div>
-        <div if.bind="result">
+        <div if.bind="result && practice">
+          <h2>Práctica terminada</h2>
+          <p repeat.for="player of result.players">${player.score} puntos · ${player.correctAnswers} de ${question ? question.totalQuestions : 10} respuestas correctas</p>
+          <button type="button" class="trivia-game-primary" click.trigger="startPractice()" disabled.bind="connecting">${connecting ? 'Conectando…' : 'Jugar otra vez'}</button>
+        </div>
+        <div if.bind="result && !practice">
           <h2>${result.isTie ? '¡Empate!' : result.winnerUserId === context.currentUser.id ? '¡Ganaste!' : 'Partida finalizada'}</h2>
           <p if.bind="result.decidedByTiebreak">El tiempo de las respuestas correctas decidió el desempate.</p>
           <ol><li repeat.for="player of result.players">${player.position}. ${player.displayName}: ${player.score} puntos · ${player.correctAnswers} aciertos</li></ol>
