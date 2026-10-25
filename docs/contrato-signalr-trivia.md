@@ -21,15 +21,13 @@ Este documento define la comunicación en tiempo real entre el cliente y el serv
 
 ## Identidad del jugador
 
-Trivia Battle utiliza autenticación JWT propia, sin depender de Auth0. El backend valida tokens firmados con RS256 mediante una clave pública configurada localmente, con el emisor `battlehub-trivia` y la audiencia `battlehub-trivia-api`.
+Trivia Battle no tiene login propio. El hub acepta el access token de la sesión del Shell (`getAccessToken()` de `GameContext`), firmado con RS256 por el emisor `Auth:Issuer` y con la audiencia de la plataforma `Auth:Audience` (`https://api.battlehub.local/profile`). El navegador lo envía como `access_token` al conectarse. Las claves de firma se obtienen del emisor, no se configuran a mano. Los tokens de servicio no pueden conectarse al hub.
 
 El identificador `userId` se obtiene del claim `sub` del JWT autenticado. El nombre visible del jugador se obtiene de la información de la sala devuelta por Matchmaking. No se aceptan identificadores de usuario enviados por URL para sustituir la autenticación.
 
-Para unirse a una partida, el cliente utiliza `JoinMatch({ matchId, matchmakingAccessToken })`. El primer valor identifica la partida y el segundo permite solicitar a Matchmaking la validación del jugador y su pertenencia a la sala.
+Para unirse a una partida, el cliente utiliza `JoinMatch({ matchId, matchmakingAccessToken })`. El primer valor identifica la partida y el segundo es el token de `getMatchmakingAccessToken()`, con el que el servidor solicita a Matchmaking la validación del jugador y su pertenencia a la sala. Antes, el servidor comprueba en Profile, con el token de la conexión, que el jugador tenga el permiso `games.trivia.play`.
 
-El token que autentica la conexión al Hub de Trivia es independiente del token utilizado para consultar Matchmaking. La compatibilidad entre ambos servicios todavía requiere coordinación con el equipo responsable de Matchmaking.
-
-Para notificar la finalización de partidas, el backend utiliza un proveedor de tokens de servicio (`IMatchmakingTokenProvider`). Actualmente se admite configurar un token mediante `Matchmaking:ServiceToken`, pero la autenticación definitiva entre servicios sigue pendiente de acordarse.
+Para notificar la finalización de partidas, el backend usa su propio token de servicio (client credentials, permiso `matches.finish`), que obtiene y renueva sin intervención del jugador.
 
 Para más información, consultar la [guía de integración con Matchmaking](integracion-shell-matchmaking.md).
 
@@ -101,6 +99,8 @@ Después de unirse correctamente, el servidor envía `CurrentState` al jugador y
 - `PLAYER_NOT_IN_MATCH`: el jugador no pertenece a la partida.
 - `MATCH_FINISHED`: la partida ya terminó.
 - `UNAUTHORIZED`: no se pudo identificar al jugador mediante un JWT válido.
+- `PERMISSION_DENIED`: el jugador no tiene el permiso `games.trivia.play` en Profile.
+- `PROFILE_UNAVAILABLE`: no se pudo consultar Profile para comprobar el permiso; se puede reintentar.
 
 ## SubmitAnswer
 
@@ -458,6 +458,8 @@ Comunica un error relacionado con una operación del juego.
 | `PLAYER_NOT_IN_MATCH` | JoinMatch, SubmitAnswer | El jugador no pertenece a la partida  |
 | `MATCH_FINISHED`      | JoinMatch               | La partida ya terminó                 |
 | `UNAUTHORIZED`        | JoinMatch               | No se pudo identificar al jugador     |
+| `PERMISSION_DENIED`   | JoinMatch               | Sin permiso `games.trivia.play`       |
+| `PROFILE_UNAVAILABLE` | JoinMatch               | Profile no respondió                  |
 | `QUESTION_NOT_ACTIVE` | SubmitAnswer            | La pregunta no es la activa           |
 | `QUESTION_CLOSED`     | SubmitAnswer            | La respuesta llegó fuera de tiempo    |
 | `ALREADY_ANSWERED`    | SubmitAnswer            | El jugador ya respondió esta pregunta |
@@ -549,6 +551,9 @@ El cliente es responsable de:
 
 # Cambios respecto a la versión anterior
 
+- Login único con Shell: el hub acepta el token de la sesión del Shell (emisor `Auth:Issuer`, audiencia `https://api.battlehub.local/profile`) en lugar del emisor `battlehub-trivia` y la audiencia `battlehub-trivia-api`; las claves de firma se obtienen del emisor.
+- `JoinMatch` comprueba el permiso `games.trivia.play` en Profile; se agregaron los errores `PERMISSION_DENIED` y `PROFILE_UNAVAILABLE`.
+- El token de servicio para la finalización se obtiene y renueva con client credentials; se eliminó `Matchmaking:ServiceToken`.
 - Se agregó `serverTimeUtc` a los eventos relacionados con tiempo para corregir relojes locales desfasados.
 - Se actualizó la autenticación de Trivia Battle para utilizar JWT propio con firma RS256.
 - Se establecieron el emisor `battlehub-trivia` y la audiencia `battlehub-trivia-api`.
