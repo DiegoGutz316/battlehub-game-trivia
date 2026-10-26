@@ -144,7 +144,6 @@ Todavía están pendientes:
 
 - El ADR de la audiencia compartida (`https://api.battlehub.local/profile`) con Shell y Profile.
 - La comprobación manual con los servicios reales y cuentas de la clase descrita arriba.
-- Implementar el modo independiente o de práctica en su tarea correspondiente.
 - Revisar las advertencias de seguridad de las dependencias.
 
 Las partidas activas se mantienen en memoria. Los resultados y las notificaciones persistidas se conservan en SQL Server.
