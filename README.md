@@ -1,6 +1,8 @@
 # battlehub-game-trivia
 
-[![CI](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci.yml)
+[![CI Backend](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-backend.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-backend.yml)
+[![CI Frontend](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-frontend.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-frontend.yml)
+[![CI Unit](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-unit.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-unit.yml)
 
 Microservicio del juego **Trivia Battle** (Equipo 5) del proyecto BattleHub.
 
@@ -140,7 +142,7 @@ El job `backend-docker` del CI construye API y DbInit, aplica `migrate` + `seed`
 
 ### Frontend (Aurelia)
 
-Requisito: [Node.js 24 LTS](https://nodejs.org/) (`>=24.11.0 <25`, fijado en `.nvmrc` y en `engines` por el ADR-003).
+Requisito: [Node.js 22 LTS](https://nodejs.org/) (`>=22 <23`, fijado en `.nvmrc` y en `engines`; R-42).
 
 Todos los comandos se corren desde `src/trivia-frontend`:
 
@@ -160,7 +162,7 @@ npm test         # lint + pruebas unitarias con Jest
 
 #### Docker
 
-`src/trivia-frontend/Dockerfile` tiene dos etapas: compila con Node 24 Alpine y copia solo `dist/` a nginx sin root (`nginx-unprivileged`, variante `alpine-slim`), que escucha en el puerto 8080. Desde la raíz del repositorio:
+`src/trivia-frontend/Dockerfile` tiene dos etapas: compila con Node 22 Alpine y copia solo `dist/` a nginx sin root (`nginx-unprivileged`, variante `alpine-slim`), que escucha en el puerto 8080. Desde la raíz del repositorio:
 
 ```bash
 docker build -t battlehub-trivia-frontend src/trivia-frontend
@@ -225,7 +227,21 @@ El CI mide la cobertura de líneas en cada ejecución:
 - **Frontend:** Jest genera `coverage/coverage-summary.json` (y el reporte HTML en `coverage/lcov-report/`).
 - **En cada pull request**, el job `coverage-comment` publica un comentario con la cobertura de backend y frontend, y lo actualiza en cada push en vez de crear uno nuevo.
 
-El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `.github/workflows/ci.yml`), tanto en el backend como en el frontend. Con `ENFORCE_COVERAGE: "true"`, si alguna de las dos partes queda por debajo, su job (`backend` o `frontend`) falla y el PR no pasa el CI. Exactamente 85 % cumple.
+El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `ci-backend.yml` / `ci-frontend.yml`), tanto en el backend como en el frontend. Con `ENFORCE_COVERAGE: "true"`, si alguna de las dos partes queda por debajo, su job falla y el PR no pasa el CI. Exactamente 85 % cumple.
+
+## Integración continua (GitHub Actions)
+
+| Workflow | Qué hace | Cuándo corre |
+|---|---|---|
+| `CI Unit` | Solo compilar + pruebas unitarias (backend y/o frontend) | Cambios en código .NET o `src/trivia-frontend` |
+| `CI Backend` | `dotnet format`, build con warnings como errores, unitarias, integración, cobertura, smoke Docker | Cambios en API/Data/Domain/DbInit/tests .NET |
+| `CI Frontend` | Lint, build, Jest, cobertura, smoke Docker (Node.js 22) | Cambios en `src/trivia-frontend` |
+| `CI Secrets` | gitleaks sobre el historial | Todo PR/push a `main` |
+| `CI Required` | Resume qué CI aplica (puente de branch protection) | Todo PR/push a `main` |
+
+Los workflows de backend, frontend y unit usan filtros `paths` en `push`/`pull_request`, así un cambio solo de frontend no ejecuta el CI del backend (y al revés). Los cambios solo en `docs/` no disparan esos flujos.
+
+**Protección de rama:** un workflow con `paths` que no se dispara deja el check en *Expected — Waiting* si estaba marcado como obligatorio. Para no bloquear PRs de documentación, marcar como required solo `CI Required / ready` y `CI Secrets / secrets`, y revisar en el resumen del PR que `CI Backend` / `CI Frontend` / `CI Unit` hayan pasado cuando correspondan.
 
 Para ver la cobertura localmente:
 

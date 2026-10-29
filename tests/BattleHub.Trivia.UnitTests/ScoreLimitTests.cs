@@ -1,5 +1,6 @@
-﻿using BattleHub.Trivia.Domain.Services;
+using BattleHub.Trivia.Domain.Services;
 namespace BattleHub.Trivia.UnitTests;
+
 public sealed class ScoreLimitTests
 {
     [Theory]

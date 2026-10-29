@@ -24,17 +24,23 @@ public sealed class QuestionRepository(TriviaDbContext db) : IQuestionRepository
         CancellationToken cancellationToken = default)
     {
         if (count <= 0)
+        {
             return [];
+        }
 
         IQueryable<QuestionRecord> query = db.Questions
             .AsNoTracking()
             .Include(question => question.Options);
 
         if (!string.IsNullOrWhiteSpace(filter?.Category))
+        {
             query = query.Where(question => question.Category == filter.Category);
+        }
 
         if (!string.IsNullOrWhiteSpace(filter?.Difficulty))
+        {
             query = query.Where(question => question.Difficulty == filter.Difficulty);
+        }
 
         var records = await query.ToListAsync(cancellationToken);
 

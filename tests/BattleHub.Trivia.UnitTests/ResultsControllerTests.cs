@@ -329,27 +329,27 @@ public sealed class ResultsControllerTests
         JsonElement metadata = default,
         bool withPlayers = true,
         List<PlayerResultRequest>? players = null) => new()
-    {
-        MatchId = matchId,
-        GameType = gameType,
-        StartedAt = withStartedAt ? StartedAt : null,
-        FinishedAt = withFinishedAt ? StartedAt + (duration ?? TimeSpan.FromMinutes(3)) : null,
-        WinnerUserId = winnerUserId,
-        Metadata = metadata,
-        Players = withPlayers
+        {
+            MatchId = matchId,
+            GameType = gameType,
+            StartedAt = withStartedAt ? StartedAt : null,
+            FinishedAt = withFinishedAt ? StartedAt + (duration ?? TimeSpan.FromMinutes(3)) : null,
+            WinnerUserId = winnerUserId,
+            Metadata = metadata,
+            Players = withPlayers
             ? players ?? [CreatePlayer("user-1", "Ana", 500), CreatePlayer("user-2", "Luis", 300)]
             : null
-    };
+        };
 
     private static PlayerResultRequest CreatePlayer(
         string? userId,
         string? displayName,
         int score = 0) => new()
-    {
-        UserId = userId,
-        DisplayName = displayName,
-        Score = score
-    };
+        {
+            UserId = userId,
+            DisplayName = displayName,
+            Score = score
+        };
 
     private static MatchResult CreateStoredMatch() => new()
     {

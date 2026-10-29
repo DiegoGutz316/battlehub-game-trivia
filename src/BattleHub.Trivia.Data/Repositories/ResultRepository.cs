@@ -16,7 +16,9 @@ public sealed class ResultRepository(TriviaDbContext db) : IResultRepository
             .AnyAsync(match => match.MatchId == result.MatchId, cancellationToken);
 
         if (exists)
+        {
             throw new MatchAlreadyExistsException(result.MatchId);
+        }
 
         var match = ToRecord(result);
         // Add genera el Guid de la partida, que la notificación usa como llave foránea.

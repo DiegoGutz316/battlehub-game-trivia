@@ -1,0 +1,170 @@
+# R-24 / R-08 / R-07: CI completo del backend (.NET).
+# Compila con advertencias como errores, linter (dotnet format), unitarias,
+# integración, cobertura y smoke Docker. No publica imágenes.
+name: CI Backend
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/BattleHub.Trivia.Api/**"
+      - "src/BattleHub.Trivia.Data/**"
+      - "src/BattleHub.Trivia.DbInit/**"
+      - "src/BattleHub.Trivia.Domain/**"
+      - "tests/BattleHub.Trivia.UnitTests/**"
+      - "tests/BattleHub.Trivia.IntegrationTests/**"
+      - "BattleHub.Trivia.slnx"
+      - "Directory.Build.props"
+      - ".editorconfig"
+      - "dotnet-tools.json"
+      - "docker-compose.yml"
+      - ".dockerignore"
+      - ".env.example"
+      - ".github/workflows/ci-backend.yml"
+      - ".github/scripts/**"
+  push:
+    branches: [main]
+    paths:
+      - "src/BattleHub.Trivia.Api/**"
+      - "src/BattleHub.Trivia.Data/**"
+      - "src/BattleHub.Trivia.DbInit/**"
+      - "src/BattleHub.Trivia.Domain/**"
+      - "tests/BattleHub.Trivia.UnitTests/**"
+      - "tests/BattleHub.Trivia.IntegrationTests/**"
+      - "BattleHub.Trivia.slnx"
+      - "Directory.Build.props"
+      - ".editorconfig"
+      - "dotnet-tools.json"
+      - "docker-compose.yml"
+      - ".dockerignore"
+      - ".env.example"
+      - ".github/workflows/ci-backend.yml"
+      - ".github/scripts/**"
+
+permissions:
+  contents: read
+
+env:
+  COVERAGE_THRESHOLD: "85"
+  ENFORCE_COVERAGE: "true"
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: |
+          dotnet restore --verbosity minimal
+          dotnet tool restore
+
+      - name: Lint (dotnet format)
+        run: dotnet format BattleHub.Trivia.slnx --verify-no-changes --severity warn --verbosity diagnostic
+
+      - name: Build
+        run: dotnet build --no-restore --warnaserror
+
+      - name: Unit tests
+        run: dotnet test tests/BattleHub.Trivia.UnitTests --no-build --collect:"XPlat Code Coverage" --results-directory coverage/raw
+
+      - name: Integration tests
+        run: dotnet test tests/BattleHub.Trivia.IntegrationTests --no-build --collect:"XPlat Code Coverage" --results-directory coverage/raw
+
+      - name: Coverage report
+        run: |
+          dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend "-reporttypes:JsonSummary;MarkdownSummaryGithub" "-filefilters:-*.g.cs;-*.generated.cs"
+          cat coverage/backend/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-backend
+          path: coverage/backend/Summary.json
+
+      - name: Coverage threshold
+        run: node .github/scripts/coverage.mjs check backend coverage/backend/Summary.json
+
+  backend-docker:
+    name: backend-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build images
+        run: |
+          docker build --file src/BattleHub.Trivia.Api/Dockerfile --tag battlehub-trivia-api:ci .
+          docker build --file src/BattleHub.Trivia.DbInit/Dockerfile --tag battlehub-trivia-dbinit:ci .
+
+      - name: Smoke test
+        run: |
+          sql_password="Tv7-$(openssl rand -hex 16)"
+          echo "::add-mask::$sql_password"
+          conn="Server=trivia-sql,1433;Database=BattleHubTrivia;User Id=sa;Password=$sql_password;TrustServerCertificate=true"
+
+          docker network create trivia-net
+          docker run --detach --name trivia-sql --network trivia-net \
+            --env ACCEPT_EULA=Y --env MSSQL_SA_PASSWORD="$sql_password" \
+            mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
+
+          sqlcmd="$(docker exec trivia-sql sh -c 'ls /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd 2>/dev/null | head -n 1')"
+          query() {
+            docker exec --env SQLCMDPASSWORD="$sql_password" trivia-sql "$sqlcmd" -S localhost -U sa -C -b -h -1 -W "$@"
+          }
+          for attempt in $(seq 1 60); do
+            query -Q "SELECT 1" > /dev/null 2>&1 && break
+            sleep 2
+          done
+          query -Q "SELECT 1" > /dev/null
+
+          docker run --rm --network trivia-net \
+            --env ConnectionStrings__Trivia="$conn" \
+            battlehub-trivia-dbinit:ci migrate
+          docker run --rm --network trivia-net \
+            --env ConnectionStrings__Trivia="$conn" \
+            battlehub-trivia-dbinit:ci seed
+          docker run --rm --network trivia-net \
+            --env ConnectionStrings__Trivia="$conn" \
+            battlehub-trivia-dbinit:ci seed
+
+          docker run --detach --name trivia-api --network trivia-net --publish 5185:8080 \
+            --env ConnectionStrings__Trivia="$conn" \
+            battlehub-trivia-api:ci
+
+          for attempt in $(seq 1 60); do
+            curl --fail --silent --output /dev/null http://localhost:5185/health && break
+            sleep 2
+          done
+          curl --fail --silent --show-error http://localhost:5185/health | grep --quiet "^Healthy$"
+
+          counts="$(query -d BattleHubTrivia -Q "SET NOCOUNT ON; SELECT CONCAT((SELECT COUNT(*) FROM __EFMigrationsHistory), ',', (SELECT COUNT(*) FROM Questions), ',', (SELECT COUNT(*) FROM AnswerOptions));" | tr -d '[:space:]')"
+          echo "Migraciones, preguntas y opciones: $counts"
+          test "$counts" = "5,30,120"
+
+          docker image ls battlehub-trivia-api:ci --format "Imagen de la API: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"
+          docker image ls battlehub-trivia-dbinit:ci --format "Imagen de DbInit: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Container logs
+        if: failure()
+        run: |
+          docker logs trivia-api || true
+          docker logs trivia-sql || true
+
+  backend-status:
+    name: backend-status
+    if: always()
+    needs: [backend, backend-docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate backend checks
+        run: |
+          if [ "${{ needs.backend.result }}" != "success" ] || [ "${{ needs.backend-docker.result }}" != "success" ]; then
+            echo "Uno o más jobs del backend fallaron"
+            exit 1
+          fi

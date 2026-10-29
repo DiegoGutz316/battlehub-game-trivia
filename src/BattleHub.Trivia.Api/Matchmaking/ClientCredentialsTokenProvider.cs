@@ -20,11 +20,18 @@ public sealed class ClientCredentialsTokenProvider(
 
     public async Task<string> GetTokenAsync(CancellationToken cancellationToken)
     {
-        if (cached is { } current && clock.GetUtcNow() < current.RenewAt) return current.Value;
+        if (cached is { } current && clock.GetUtcNow() < current.RenewAt)
+        {
+            return current.Value;
+        }
+
         await gate.WaitAsync(cancellationToken);
         try
         {
-            if (cached is { } renewed && clock.GetUtcNow() < renewed.RenewAt) return renewed.Value;
+            if (cached is { } renewed && clock.GetUtcNow() < renewed.RenewAt)
+            {
+                return renewed.Value;
+            }
 
             var endpoint = config["Matchmaking:TokenEndpoint"];
             var clientId = config["Matchmaking:ClientId"];
@@ -32,8 +39,10 @@ public sealed class ClientCredentialsTokenProvider(
             var audience = config["Matchmaking:Audience"];
             if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps
                 || string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) || string.IsNullOrWhiteSpace(audience))
+            {
                 throw new InvalidOperationException(
                     "Configurar Matchmaking:TokenEndpoint, Matchmaking:ClientId, Matchmaking:ClientSecret y Matchmaking:Audience.");
+            }
 
             using var response = await http.PostAsync(url, new FormUrlEncodedContent(new Dictionary<string, string>
             {
@@ -43,11 +52,15 @@ public sealed class ClientCredentialsTokenProvider(
                 ["audience"] = audience
             }), cancellationToken);
             if (!response.IsSuccessStatusCode)
+            {
                 throw new InvalidOperationException($"No se obtuvo el token de servicio ({(int)response.StatusCode}).");
+            }
 
             var data = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken);
             if (data is null || string.IsNullOrWhiteSpace(data.AccessToken) || data.ExpiresIn <= 0)
+            {
                 throw new InvalidOperationException("El token de servicio recibido no es válido.");
+            }
 
             // Se renueva un minuto antes de vencer (o a la mitad de su vida, si dura menos de dos minutos).
             var lifetime = TimeSpan.FromSeconds(data.ExpiresIn);

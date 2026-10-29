@@ -1,4 +1,4 @@
-﻿using BattleHub.Trivia.Api.Matchmaking;
+using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Interfaces;
@@ -29,13 +29,21 @@ public sealed class FinishWorkerTests(TriviaApiFactory factory)
     {
         var id = "retry-" + Guid.NewGuid().ToString("N");
         using var scope = factory.Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<IResultRepository>().SaveAsync(new MatchResult {
-            MatchId = id, StartedAt = factory.Clock.GetUtcNow(), FinishedAt = factory.Clock.GetUtcNow(),
-            Players = [new PlayerResult { UserId = "player-one", DisplayName = "Uno", Position = 1 }], WinnerUserId = "player-one"
+        await scope.ServiceProvider.GetRequiredService<IResultRepository>().SaveAsync(new MatchResult
+        {
+            MatchId = id,
+            StartedAt = factory.Clock.GetUtcNow(),
+            FinishedAt = factory.Clock.GetUtcNow(),
+            Players = [new PlayerResult { UserId = "player-one", DisplayName = "Uno", Position = 1 }],
+            WinnerUserId = "player-one"
         });
         var gateway = new Gateway(id, outcome);
         var worker = CreateWorker(gateway);
-        for (var i = 0; i < 6 && gateway.Calls == 0; i++) await worker.DispatchAsync(default);
+        for (var i = 0; i < 6 && gateway.Calls == 0; i++)
+        {
+            await worker.DispatchAsync(default);
+        }
+
         Assert.Equal(1, gateway.Calls);
         var db = scope.ServiceProvider.GetRequiredService<TriviaDbContext>();
         var pending = await db.FinishNotifications.AsNoTracking().SingleAsync(item => item.MatchId == id);
@@ -44,7 +52,11 @@ public sealed class FinishWorkerTests(TriviaApiFactory factory)
         factory.Clock.Advance(31);
         var restoredGateway = new Gateway(id, FinishOutcome.Confirmed);
         var restored = CreateWorker(restoredGateway);
-        for (var i = 0; i < 6; i++) await restored.DispatchAsync(default);
+        for (var i = 0; i < 6; i++)
+        {
+            await restored.DispatchAsync(default);
+        }
+
         Assert.Equal(blocked ? 0 : 1, restoredGateway.Calls);
         Assert.Equal(!blocked, (await db.FinishNotifications.AsNoTracking().SingleAsync(item => item.MatchId == id)).Delivered);
     }

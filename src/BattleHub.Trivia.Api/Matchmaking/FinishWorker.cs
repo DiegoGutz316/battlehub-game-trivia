@@ -1,4 +1,4 @@
-﻿using BattleHub.Trivia.Data.Context;
+using BattleHub.Trivia.Data.Context;
 using Microsoft.EntityFrameworkCore;
 
 namespace BattleHub.Trivia.Api.Matchmaking;
@@ -23,7 +23,10 @@ public sealed class FinishWorker(IServiceScopeFactory scopes, IMatchmakingGatewa
             item.Attempts++;
             item.NextAttemptAt = clock.GetUtcNow().AddSeconds(30);
             await itemDb.SaveChangesAsync(ct);
-            if (!item.Delivered) logger.LogWarning("Callback pendiente para {MatchId}", id);
+            if (!item.Delivered)
+            {
+                logger.LogWarning("Callback pendiente para {MatchId}", id);
+            }
         }));
     }
     protected override async Task ExecuteAsync(CancellationToken ct)

@@ -1,10 +1,10 @@
 
-using BattleHub.Trivia.Data;
-using BattleHub.Trivia.Domain.Services;
 using BattleHub.Trivia.Api.Auth;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Api.Profiles;
+using BattleHub.Trivia.Data;
+using BattleHub.Trivia.Domain.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
