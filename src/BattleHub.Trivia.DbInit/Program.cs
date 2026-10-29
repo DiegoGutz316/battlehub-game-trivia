@@ -1,6 +1,7 @@
 using BattleHub.Trivia.Data;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Data.Seed;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,23 +96,37 @@ static void PrintUsage()
 
 static async Task WaitForDatabaseAsync(IServiceProvider services, ILogger logger)
 {
-    const int maxAttempts = 60;
+    // Esperar al motor (master), no a la base de la app: BattleHubTrivia aún no existe
+    // antes de `migrate`, y CanConnectAsync sobre esa base devolvería false para siempre.
+    const int maxAttempts = 90;
     var delay = TimeSpan.FromSeconds(2);
+
+    using var scope = services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<TriviaDbContext>();
+    var configured = db.Database.GetConnectionString()
+        ?? throw new InvalidOperationException(
+            "Falta ConnectionStrings__Trivia (o ConnectionStrings:Trivia).");
+
+    var builder = new SqlConnectionStringBuilder(configured)
+    {
+        InitialCatalog = "master"
+    };
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++)
     {
         try
         {
-            using var scope = services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<TriviaDbContext>();
-            if (await db.Database.CanConnectAsync())
-            {
-                logger.LogInformation(
-                    "SQL Server disponible (intento {Attempt}/{MaxAttempts}).",
-                    attempt,
-                    maxAttempts);
-                return;
-            }
+            await using var connection = new SqlConnection(builder.ConnectionString);
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT 1";
+            _ = await command.ExecuteScalarAsync();
+
+            logger.LogInformation(
+                "SQL Server disponible (intento {Attempt}/{MaxAttempts}).",
+                attempt,
+                maxAttempts);
+            return;
         }
         catch (Exception ex) when (attempt < maxAttempts)
         {
