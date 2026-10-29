@@ -230,7 +230,12 @@ Los endpoints bajo `/api/games/trivia/...` exigen un **JWT Bearer** emitido por 
 - Lectura (`GET` historial, stats, resultado): política `TriviaRead` (jugador autenticado o cliente de máquina con permiso de escritura).
 - Escritura (`POST` resultados): política `TriviaWrite` (cliente M2M con permiso `game.trivia.results.write`).
 
-Sustituye `TU_TOKEN_JWT` por un token de prueba; **no** uses secretos de producción en ejemplos.
+Exporta el JWT del Shell en una variable de entorno local (**nunca** lo subas al repo):
+
+```bash
+export TRIVIA_ACCESS_TOKEN='(jwt de sesión del Shell)'
+export TRIVIA_M2M_TOKEN='(jwt del cliente de servicio, solo escritura)'
+```
 
 Sin token, la API responde `401 Unauthorized`:
 
@@ -243,7 +248,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5185/api/games/trivia/
 
 ```bash
 curl -s -X GET "http://localhost:5185/api/games/trivia/players/user-demo/stats" \
-  -H "Authorization: Bearer TU_TOKEN_JWT" \
+  --oauth2-bearer "$TRIVIA_ACCESS_TOKEN" \
   -H "Accept: application/json"
 ```
 
@@ -265,7 +270,7 @@ Si el `sub` del token no coincide con `user-demo` (y no eres cliente writer), la
 
 ```bash
 curl -s -X GET "http://localhost:5185/api/games/trivia/players/user-demo/history" \
-  -H "Authorization: Bearer TU_TOKEN_JWT" \
+  --oauth2-bearer "$TRIVIA_ACCESS_TOKEN" \
   -H "Accept: application/json"
 ```
 
@@ -275,7 +280,7 @@ Devuelve un arreglo de `MatchResultResponse` (más reciente primero).
 
 ```bash
 curl -s -X GET "http://localhost:5185/api/games/trivia/results/match-demo-001" \
-  -H "Authorization: Bearer TU_TOKEN_JWT" \
+  --oauth2-bearer "$TRIVIA_ACCESS_TOKEN" \
   -H "Accept: application/json"
 ```
 
@@ -289,7 +294,7 @@ Requiere token de cliente de servicio con permiso de escritura (no el token de u
 
 ```bash
 curl -s -X POST "http://localhost:5185/api/games/trivia/results" \
-  -H "Authorization: Bearer TU_TOKEN_M2M" \
+  --oauth2-bearer "$TRIVIA_M2M_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
