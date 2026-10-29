@@ -151,10 +151,11 @@ jobs:
 
       - name: Smoke test
         run: |
+          set -euo pipefail
           # Contraseña de SQL Server solo para este job: se genera aquí, se oculta en los registros y no se guarda.
           sql_password="Tv7-$(openssl rand -hex 16)"
           echo "::add-mask::$sql_password"
-          conn="Server=trivia-sql,1433;Database=BattleHubTrivia;User Id=sa;Password=$sql_password;TrustServerCertificate=true"
+          conn="Server=trivia-sql,1433;Database=BattleHubTrivia;User Id=sa;Password=${sql_password};TrustServerCertificate=True;Encrypt=False"
 
           docker network create trivia-net
           docker run --detach --name trivia-sql --network trivia-net \
@@ -162,15 +163,32 @@ jobs:
             mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
 
           # sqlcmd está en mssql-tools18 o en mssql-tools, según la versión de la imagen.
-          sqlcmd="$(docker exec trivia-sql sh -c 'ls /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd 2>/dev/null | head -n 1')"
-          query() {
-            docker exec --env SQLCMDPASSWORD="$sql_password" trivia-sql "$sqlcmd" -S localhost -U sa -C -b -h -1 -W "$@"
+          resolve_sqlcmd() {
+            docker exec trivia-sql sh -c \
+              'ls /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd 2>/dev/null | head -n 1'
           }
-          for attempt in $(seq 1 60); do
-            query -Q "SELECT 1" > /dev/null 2>&1 && break
+          query() {
+            local sqlcmd
+            sqlcmd="$(resolve_sqlcmd)"
+            if [ -z "$sqlcmd" ]; then
+              return 1
+            fi
+            docker exec --env SQLCMDPASSWORD="$sql_password" trivia-sql \
+              "$sqlcmd" -S localhost -U sa -C -b -h -1 -W "$@"
+          }
+          echo "Esperando a que SQL Server acepte conexiones…"
+          for attempt in $(seq 1 90); do
+            if query -Q "SELECT 1" > /dev/null 2>&1; then
+              echo "SQL Server listo (intento ${attempt})."
+              break
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              echo "SQL Server no aceptó conexiones a tiempo." >&2
+              docker logs trivia-sql || true
+              exit 1
+            fi
             sleep 2
           done
-          query -Q "SELECT 1" > /dev/null
 
           # Migraciones y datos iniciales: procesos independientes (no arranque de la API).
           docker run --rm --network trivia-net \
