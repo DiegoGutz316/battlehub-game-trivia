@@ -4,7 +4,7 @@ namespace BattleHub.Trivia.Domain.Interfaces;
 
 /// <summary>
 /// Acceso de solo lectura al banco de preguntas.
-/// La carga inicial la hace QuestionSeeder (proyecto Data), no las migraciones.
+/// La carga inicial la hace el proceso DbInit (InitialDataGenerator), no las migraciones ni el arranque de la API.
 /// </summary>
 public interface IQuestionRepository
 {

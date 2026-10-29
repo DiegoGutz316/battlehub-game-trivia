@@ -1,8 +1,9 @@
-# Contexto de la imagen de la API (src/BattleHub.Trivia.Api/Dockerfile): solo sus tres proyectos de .NET.
+# Contexto de las imágenes .NET (API y DbInit): solo los proyectos necesarios.
 # El frontend se construye con su propio contexto y su propio .dockerignore (src/trivia-frontend).
 *
 !src/BattleHub.Trivia.Api/
 !src/BattleHub.Trivia.Data/
+!src/BattleHub.Trivia.DbInit/
 !src/BattleHub.Trivia.Domain/
 # Dentro de esos proyectos, fuera los resultados de compilación y la configuración local.
 **/bin/

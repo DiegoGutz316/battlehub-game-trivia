@@ -144,14 +144,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build image
-        run: docker build --file src/BattleHub.Trivia.Api/Dockerfile --tag battlehub-trivia-api:ci .
+      - name: Build images
+        run: |
+          docker build --file src/BattleHub.Trivia.Api/Dockerfile --tag battlehub-trivia-api:ci .
+          docker build --file src/BattleHub.Trivia.DbInit/Dockerfile --tag battlehub-trivia-dbinit:ci .
 
       - name: Smoke test
         run: |
           # Contraseña de SQL Server solo para este job: se genera aquí, se oculta en los registros y no se guarda.
           sql_password="Tv7-$(openssl rand -hex 16)"
           echo "::add-mask::$sql_password"
+          conn="Server=trivia-sql,1433;Database=BattleHubTrivia;User Id=sa;Password=$sql_password;TrustServerCertificate=true"
 
           docker network create trivia-net
           docker run --detach --name trivia-sql --network trivia-net \
@@ -169,13 +172,22 @@ jobs:
           done
           query -Q "SELECT 1" > /dev/null
 
-          # El emisor y la audiencia de los tokens vienen de appsettings.json; las claves se descargan del emisor al validar un token.
+          # Migraciones y datos iniciales: procesos independientes (no arranque de la API).
+          docker run --rm --network trivia-net \
+            --env ConnectionStrings__Trivia="$conn" \
+            battlehub-trivia-dbinit:ci migrate
+          docker run --rm --network trivia-net \
+            --env ConnectionStrings__Trivia="$conn" \
+            battlehub-trivia-dbinit:ci seed
+          # Segunda ejecución del seed: no debe duplicar filas.
+          docker run --rm --network trivia-net \
+            --env ConnectionStrings__Trivia="$conn" \
+            battlehub-trivia-dbinit:ci seed
+
           docker run --detach --name trivia-api --network trivia-net --publish 5185:8080 \
-            --env ConnectionStrings__Trivia="Server=trivia-sql,1433;Database=BattleHubTrivia;User Id=sa;Password=$sql_password;TrustServerCertificate=true" \
-            --env Database__MigrateOnStartup=true --env Database__SeedQuestions=true \
+            --env ConnectionStrings__Trivia="$conn" \
             battlehub-trivia-api:ci
 
-          # La API migra y carga las preguntas antes de empezar a responder.
           for attempt in $(seq 1 60); do
             curl --fail --silent --output /dev/null http://localhost:5185/health && break
             sleep 2
@@ -187,6 +199,7 @@ jobs:
           test "$counts" = "5,30,120"
 
           docker image ls battlehub-trivia-api:ci --format "Imagen de la API: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"
+          docker image ls battlehub-trivia-dbinit:ci --format "Imagen de DbInit: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Container logs
         if: failure()

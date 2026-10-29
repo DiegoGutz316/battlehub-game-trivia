@@ -2,7 +2,7 @@ namespace BattleHub.Trivia.Data.Seed;
 
 /// <summary>
 /// Banco inicial de preguntas de Trivia Battle: 30 preguntas con 4 opciones cada una.
-/// Lo carga <see cref="QuestionSeeder"/> cuando la tabla Questions está vacía.
+/// Lo carga <see cref="InitialDataGenerator"/> (proceso DbInit / Docker Compose) cuando la tabla Questions está vacía.
 /// </summary>
 public static class QuestionBankData
 {

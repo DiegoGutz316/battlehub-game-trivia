@@ -115,13 +115,16 @@ Desde la raíz del repositorio:
 dotnet run --project src/BattleHub.Trivia.Api
 ```
 
-Este comando usa el perfil `http` de `launchSettings.json`, con el entorno Development. En ese perfil, `Database:MigrateOnStartup` y `Database:SeedQuestions` están activados: la API aplica las migraciones y carga las 30 preguntas iniciales mediante `QuestionSeeder`, sin scripts. Si la base de datos no existe, la crea; si ya tiene preguntas, no las vuelve a cargar.
+Antes de `dotnet run` de la API, hay que preparar el esquema y el banco de preguntas con el proceso independiente `BattleHub.Trivia.DbInit` (no se hace en el arranque de la API):
+
+```powershell
+dotnet run --project src/BattleHub.Trivia.DbInit -- migrate
+dotnet run --project src/BattleHub.Trivia.DbInit -- seed
+```
 
 Por defecto se usa la base LocalDB `BattleHubTrivia`. Para usar otra base se configura `ConnectionStrings:Trivia`.
 
-Fuera de Development, o al iniciar con `--no-launch-profile`, ambos valores están en `false` (`appsettings.json`) y deben activarse por configuración o variable de entorno.
-
-Para ejecutar la API en un contenedor, ver la sección "Docker" del backend en el [README](../README.md).
+Para levantar SQL Server, migraciones, datos, API y frontend con un solo comando, ver la sección **Docker Compose** del [README](../README.md).
 
 ## Pruebas de integración
 

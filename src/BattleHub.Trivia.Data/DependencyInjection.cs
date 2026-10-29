@@ -26,6 +26,7 @@ public static class DependencyInjection
 
         services.AddScoped<IResultRepository, ResultRepository>();
         services.AddScoped<IQuestionRepository, QuestionRepository>();
+        services.AddScoped<InitialDataGenerator>();
         services.AddScoped<QuestionSeeder>();
 
         return services;
