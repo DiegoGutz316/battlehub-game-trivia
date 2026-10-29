@@ -1,0 +1,45 @@
+# R-06: validar títulos semánticos de Pull Requests (Conventional Commits).
+# No compila ni ejecuta pruebas; solo revisa el título del PR.
+
+name: PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  title:
+    name: semantic-title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validar formato Conventional Commits del título
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          echo "Título del PR: ${TITLE}"
+
+          # tipo(ámbito opcional)!: descripción  — tipos en minúsculas
+          pattern='^(feat|fix|docs|test|refactor|ci|build|chore|perf|style)(\([a-z0-9._/-]+\))?!?: .+'
+
+          if printf '%s' "${TITLE}" | grep -Eq "${pattern}"; then
+            echo "El título cumple la convención semántica."
+            exit 0
+          fi
+
+          {
+            echo "::error::Título de PR inválido."
+            echo "Usa Conventional Commits, por ejemplo:"
+            echo "  feat: implementar modo playground"
+            echo "  fix(api): corregir conflicto al guardar resultado"
+            echo "  docs: actualizar instrucciones de Docker Compose"
+            echo "  ci: separar workflows de backend y frontend"
+            echo "Prefijos permitidos: feat, fix, docs, test, refactor, ci, build, chore, perf, style"
+            echo "Ámbito opcional entre paréntesis: feat(frontend): ..."
+            echo "Debe haber un espacio después de los dos puntos y una descripción no vacía."
+          } >&2
+          exit 1

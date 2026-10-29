@@ -6,16 +6,16 @@ Microservicio del juego **Trivia Battle** (Equipo 5) del proyecto BattleHub.
 
 ## Entrega de integración local
 
-La implementación local del Shell y el juego se explica en [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md). Incluye partidas SignalR, resultado persistido y cola M2M. Revisar esa guía antes de los comandos históricos de este README; no implica publicación ni aprobación de extensiones del contrato central.
+La integración con el Shell y Matchmaking (partidas SignalR, resultado persistido y cola M2M) está en [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md).
 
 Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://github.com/javiercoulon-public/battlehub-contracts).
 
 ## Componentes
 
-- **API REST** en .NET 10: `/api/games/trivia/...` (resultados, historial y estadísticas por jugador).
-- **Hub de SignalR** propio: `/hubs/trivia` (mecánica del juego en tiempo real).
-- **Base de datos propia** para partidas, resultados y estadísticas (motor definido por ADR en `battlehub-contracts/adrs`).
-- **Microfrontend** en Aurelia, cargado por el Shell mediante Module Federation.
+- **API REST** en .NET 10: `/api/games/trivia/...` (resultados, historial y estadísticas por jugador). Requiere JWT del Shell.
+- **Hub de SignalR**: `/hubs/trivia` (partida con sesión) y `/hubs/trivia/practice` (modo práctica / Playground, anónimo).
+- **Base de datos** SQL Server propia (esquema EF + banco de preguntas).
+- **Microfrontend** Aurelia 2, cargado por el Shell con Module Federation (`triviaGame` / `remoteEntry.js`).
 
 ## Estructura
 
@@ -25,7 +25,7 @@ docker-compose.yml                   → SQL Server + migraciones + seed + API +
 .env.example                         → plantilla de variables (copiar a .env; no subir secretos)
 .dockerignore                        → contexto de las imágenes .NET (Api, Data, DbInit, Domain)
 docs/                                → documentación del equipo
-.github/workflows/                   → pipeline de CI
+.github/                             → workflows de CI y plantilla de Pull Requests
 src/
   BattleHub.Trivia.Api/              → backend .NET 10 (punto de entrada)
     Dockerfile                       → imagen de la API (construir desde la raíz)
@@ -39,165 +39,313 @@ tests/
   BattleHub.Trivia.IntegrationTests/
 ```
 
-## Docker Compose (comando único)
+---
 
-Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (o Docker Engine + Compose v2).
+## Cómo ejecutar Trivia (oficial: solo Docker Compose)
 
-Una sola vez, desde la raíz del repositorio:
+La forma **oficial** de levantar el sistema completo es Docker Compose. No hace falta instalar .NET ni Node, ni arrancar SQL Server a mano, ni aplicar migraciones ni el seed por separado: Compose construye las imágenes y orquesta todo.
+
+### 1. Herramientas necesarias
+
+- [Git](https://git-scm.com/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/macOS) **o** Docker Engine + Compose v2 (Linux)
+
+Comprueba:
+
+```bash
+docker --version
+docker compose version
+```
+
+### 2. Obtener el repositorio
+
+```bash
+git clone https://github.com/DiegoGutz316/battlehub-game-trivia.git
+cd battlehub-game-trivia
+```
+
+### 3. Configuración inicial y variables de entorno
+
+Copia la plantilla y edita las contraseñas (una sola vez):
 
 ```bash
 cp .env.example .env
-# Editar .env: MSSQL_SA_PASSWORD y la misma contraseña dentro de ConnectionStrings__Trivia
 ```
 
-Arranque completo (construye imágenes, crea contenedores, espera SQL Server, aplica migraciones, inserta las 30 preguntas, levanta API y frontend):
+En `.env` debes:
+
+1. Definir `MSSQL_SA_PASSWORD` (política fuerte de SQL Server: mayúscula, minúscula, número y símbolo).
+2. Usar **la misma** contraseña dentro de `ConnectionStrings__Trivia`.
+3. Dejar `TRIVIA_API_URL=http://localhost:5185` si accedes desde el navegador en la máquina anfitriona.
+4. Completar `Matchmaking__ClientSecret` solo si vas a avisar el fin de partida a Matchmaking (opcional para probar el juego local).
+
+No subas `.env` al repositorio (está en `.gitignore`).
+
+### 4. Iniciar el proyecto
+
+Desde la raíz del repositorio:
 
 ```bash
 docker compose up --build
 ```
 
-Apagado (conserva el volumen `trivia-sql-data`; los datos persisten):
+Ese único comando:
+
+1. Construye las imágenes de API, DbInit y frontend.
+2. Arranca SQL Server y espera el healthcheck.
+3. Ejecuta `db-migrate` (esquema EF) y termina.
+4. Ejecuta `db-seed` (30 preguntas / 120 opciones, idempotente) y termina.
+5. Arranca la API cuando el seed terminó bien.
+6. Arranca el frontend cuando `GET /health` de la API responde `Healthy`.
+
+La generación de datos **no** ocurre en el arranque de la API (`Program.cs`). La hacen los servicios one-shot `db-migrate` y `db-seed` (`BattleHub.Trivia.DbInit`).
+
+### 5. Acceder al frontend
+
+- Juego / arnés local: [http://localhost:4002](http://localhost:4002)
+- Module Federation: [http://localhost:4002/remoteEntry.js](http://localhost:4002/remoteEntry.js)
+- Modo práctica (Playground, sin Shell): abre `http://localhost:4002/` con la API ya arriba vía Compose. Opcional: `http://localhost:4002/?displayName=Jugador%202`
+
+### 6. Acceder a la API
+
+- Base HTTP: [http://localhost:5185](http://localhost:5185)
+- Salud: [http://localhost:5185/health](http://localhost:5185/health) → cuerpo `Healthy`
+- OpenAPI (solo si la API corre en Development): `/openapi/v1.json`
+
+### 7. Confirmar que los servicios funcionan
+
+En otra terminal:
+
+```bash
+docker compose ps
+curl -s http://localhost:5185/health
+curl -sI http://localhost:4002/ | head -n 1
+curl -sI http://localhost:4002/remoteEntry.js | head -n 1
+```
+
+Esperado: contenedores `api` y `frontend` en ejecución; `/health` responde `Healthy`; el frontend responde HTTP 200.
+
+### 8. Detener los contenedores
 
 ```bash
 docker compose down
 ```
 
-| Servicio | URL / puerto | Rol |
-|---|---|---|
-| Frontend | http://localhost:4002 | Microfrontend (también `remoteEntry.js`) |
-| API | http://localhost:5185 | REST + SignalR (`/health` → `Healthy`) |
-| SQL Server | localhost:1433 | Persistencia (volumen `trivia-sql-data`) |
+Conserva el volumen `trivia-sql-data` (esquema y preguntas persisten). No uses `docker compose down -v` salvo que quieras borrar la base local a propósito.
 
-Orden real de arranque:
-
-1. `sqlserver` — healthy cuando acepta `SELECT 1`.
-2. `db-migrate` — aplica las migraciones EF y termina.
-3. `db-seed` — inserta el banco de preguntas con `InitialDataGenerator` (idempotente) y termina.
-4. `api` — arranca solo cuando el seed terminó bien; no migra ni siembra.
-5. `frontend` — arranca cuando `/health` de la API responde `Healthy`.
-
-La generación de datos **no** ocurre en `Program.cs`. Es el servicio `db-seed` (`BattleHub.Trivia.DbInit seed`). Si se vuelve a ejecutar `docker compose up`, el seed no duplica preguntas.
-
-Logs:
+### 9. Logs ante errores
 
 ```bash
 docker compose logs -f api
 docker compose logs db-migrate
 docker compose logs db-seed
+docker compose logs frontend
+docker compose logs sqlserver
 ```
-
-Problemas frecuentes:
 
 | Síntoma | Qué revisar |
 |---|---|
 | Compose pide `MSSQL_SA_PASSWORD` | Falta `.env` o la variable está vacía. |
-| Login de SQL falla | La contraseña de `ConnectionStrings__Trivia` debe ser la misma que `MSSQL_SA_PASSWORD`. |
-| El frontend no habla con la API | `TRIVIA_API_URL` debe ser la URL del **navegador** (`http://localhost:5185`), no el nombre del servicio Docker. Hay que reconstruir el frontend si se cambia. |
+| Login de SQL falla | La contraseña de `ConnectionStrings__Trivia` debe coincidir con `MSSQL_SA_PASSWORD`. |
+| El frontend no habla con la API | `TRIVIA_API_URL` debe ser la URL del **navegador** (`http://localhost:5185`), no el nombre del servicio Docker. Rebuild del frontend si la cambias. |
 | Matchmaking no recibe el fin de partida | Completar `Matchmaking__ClientSecret` en `.env`. |
 
-## Cómo correr localmente (sin Compose)
+---
 
-### Backend (.NET 10)
+## Infraestructura: base de datos, variables y puertos
 
-Requisito: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
+### Motor de base de datos
 
-La API acepta el token de la sesión del Shell (ver [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md#autenticación-de-trivia)). Para avisar el fin de partida a Matchmaking:
+| Dato | Valor real en este repo |
+|---|---|
+| Motor | Microsoft SQL Server |
+| Imagen Docker | `mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04` |
+| Servicio Compose | `sqlserver` |
+| Base | `BattleHubTrivia` (en la cadena de conexión) |
+| Volumen | `trivia-sql-data` → `/var/opt/mssql` |
+| Puerto publicado | `1433:1433` |
 
-```bash
-dotnet user-secrets set "Matchmaking:ClientSecret" "<secreto del cliente de servicio de Trivia>" --project src/BattleHub.Trivia.Api
-```
+La API, `db-migrate` y `db-seed` se conectan **dentro de la red Docker** con el host `sqlserver` (nombre del servicio), no con `localhost`. Desde el anfitrión, SQL Server queda en `localhost:1433` si necesitas un cliente externo.
 
-Preparar esquema y datos, luego arrancar la API (LocalDB por defecto si no hay cadena de conexión):
+**Inicialización del esquema (R-28 / R-27):** servicio `db-migrate` → `BattleHub.Trivia.DbInit migrate`.
 
-```bash
-dotnet restore
-dotnet build
-dotnet run --project src/BattleHub.Trivia.DbInit -- migrate
-dotnet run --project src/BattleHub.Trivia.DbInit -- seed
-dotnet run --project src/BattleHub.Trivia.Api
-```
+**Datos iniciales (R-28):** servicio `db-seed` → `BattleHub.Trivia.DbInit seed` (`InitialDataGenerator`, idempotente). No duplica preguntas si vuelves a hacer `docker compose up`.
 
-La API queda en `http://localhost:5185` (`GET /health` → `Healthy`).
+### Variables de entorno
 
-Pruebas:
+Definidas en `.env.example` / `.env` y usadas por Compose:
 
-```bash
-dotnet test tests/BattleHub.Trivia.UnitTests
-dotnet test tests/BattleHub.Trivia.IntegrationTests
-```
+| Variable | Descripción | Obligatoria | Ejemplo |
+|---|---|---|---|
+| `ACCEPT_EULA` | Aceptación de la EULA de SQL Server | Sí (Compose) | `Y` |
+| `MSSQL_SA_PASSWORD` | Contraseña del usuario `sa` del contenedor SQL | Sí | `Change_Me_Strong_Passw0rd!` (cámbiala) |
+| `ConnectionStrings__Trivia` | Cadena EF Core para migrate/seed/API **en la red Docker** | Sí | `Server=sqlserver,1433;Database=BattleHubTrivia;User Id=sa;Password=…;TrustServerCertificate=True;Encrypt=False` |
+| `TRIVIA_API_URL` | URL de la API que ve el **navegador** (build-arg del frontend) | Sí para el frontend | `http://localhost:5185` |
+| `Matchmaking__ClientSecret` | Secreto M2M para avisar fin de partida | No (solo Matchmaking) | _(vacío en `.env.example`)_ |
+| `ASPNETCORE_URLS` | URL de escucha dentro del contenedor API | Fija en Compose | `http://+:8080` |
+| `Cors__Origins__0` / `__1` | Orígenes CORS permitidos | Fijas en Compose | `http://localhost:4000`, `http://localhost:4002` |
 
-Las pruebas de integración usan SQL Server en un contenedor (Testcontainers). Sin Docker: `TRIVIA_TEST_CONNECTION='Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true'`.
+Valores públicos opcionales (comentados en `.env.example`; por defecto vienen de `appsettings.json`): `Auth__Issuer`, `Auth__Audience`, `Matchmaking__BaseUrl`, `Matchmaking__TokenEndpoint`, `Matchmaking__Audience`, `Matchmaking__ClientId`, `Profile__BaseUrl`.
 
-#### Imágenes individuales
+No publiques contraseñas reales ni tokens en el README ni en commits.
 
-```bash
-docker build --file src/BattleHub.Trivia.Api/Dockerfile --tag battlehub-trivia-api .
-docker build --file src/BattleHub.Trivia.DbInit/Dockerfile --tag battlehub-trivia-dbinit .
-docker run --rm -p 5185:8080 --env-file .env battlehub-trivia-api
-```
+### Puertos
 
-El job `backend-docker` del CI construye API y DbInit, aplica `migrate` + `seed` (y repite `seed` para comprobar que no hay duplicados), levanta la API y verifica 5 migraciones, 30 preguntas y 120 opciones.
+| Servicio Compose | Puerto interno | Puerto publicado | Propósito |
+|---|---|---|---|
+| `sqlserver` | 1433 | 1433 | Base de datos |
+| `api` | 8080 | 5185 | Backend REST + SignalR |
+| `frontend` | 8080 | 4002 | Microfrontend (nginx) |
+| `db-migrate` / `db-seed` | — | — | One-shot; sin puertos publicados |
 
-### Frontend (Aurelia)
+**Interno vs navegador:** entre contenedores se usa la red `trivia` (p. ej. la API habla con `sqlserver:1433`). El navegador usa los puertos **publicados** (`localhost:5185`, `localhost:4002`). Por eso `TRIVIA_API_URL` es `http://localhost:5185` y no `http://api:8080`.
 
-Requisito: [Node.js 24 LTS](https://nodejs.org/) (`>=24.11.0 <25`, fijado en `.nvmrc` y en `engines` por el ADR-003).
+---
 
-Todos los comandos se corren desde `src/trivia-frontend`:
+## Ejemplos de uso de la API con curl
 
-```bash
-cd src/trivia-frontend
-npm ci           # instalar dependencias (usa package-lock.json)
-npm start        # juego solo, en http://localhost:4002 (modo desarrollo, sin Shell)
-```
+Base asumida con Compose: `http://localhost:5185`.
 
-Los mismos pasos que corre el CI:
+### Público: salud de la API
 
-```bash
-npm run lint     # ESLint (código y pruebas) + Stylelint
-npm run build    # build de producción en dist/ (genera dist/remoteEntry.js)
-npm test         # lint + pruebas unitarias con Jest
-```
-
-#### Docker
-
-`src/trivia-frontend/Dockerfile` tiene dos etapas: compila con Node 24 Alpine y copia solo `dist/` a nginx sin root (`nginx-unprivileged`, variante `alpine-slim`), que escucha en el puerto 8080. Desde la raíz del repositorio:
+Comprueba que el contenedor `api` está listo. No requiere autenticación.
 
 ```bash
-docker build -t battlehub-trivia-frontend src/trivia-frontend
-docker run --rm -p 4002:8080 battlehub-trivia-frontend
+curl -s -i http://localhost:5185/health
 ```
 
-El juego queda en `http://localhost:4002` y el Shell lo carga desde `http://localhost:4002/remoteEntry.js`, igual que con `npm start`. nginx agrega el encabezado CORS que pide el ADR-003 y evita que el navegador guarde una versión vieja de `remoteEntry.js`.
+Respuesta esperada:
 
-La URL de la API queda escrita en el bundle al compilar, así que se cambia al construir la imagen: `docker build --build-arg TRIVIA_API_URL=https://api.ejemplo.com -t battlehub-trivia-frontend src/trivia-frontend`.
+```http
+HTTP/1.1 200 OK
+...
 
-El job `frontend-docker` del CI construye la imagen en cada pull request, la levanta y comprueba que sirva `remoteEntry.js` con CORS.
-
-#### Modo desarrollo (sin Shell)
-
-`npm start` abre un arnés que simula lo que hace el Shell: llama a `initialize()` con un contexto de prueba y tiene botones para `start()`, `pause()` y `dispose()`. Si el juego rechaza una llamada, muestra el error como lo haría el Shell (`LIFECYCLE_ERROR`).
-
-#### Modo práctica (sin Shell)
-
-Sin el Shell no hay sesión ni sala de Matchmaking, así que el juego ofrece el botón **Jugar en modo práctica**: una partida de un solo jugador con las mismas pantallas (diez preguntas, temporizador, revisión y resultado) contra el hub anónimo `/hubs/trivia/practice` de la API. La práctica no se guarda en el historial ni cuenta en las estadísticas, y al terminar se puede jugar otra vez. Solo necesita la API corriendo (`dotnet run --project src/BattleHub.Trivia.Api`):
-
-```text
-http://localhost:4002/
-http://localhost:4002/?displayName=Jugador%202   (otro nombre para el jugador)
+Healthy
 ```
 
-Cuando el juego se abre desde el Shell, el modo práctica no aparece y todo funciona como una partida normal.
+### Autenticación de los endpoints REST
 
-#### Integración con el Shell (Module Federation, ADR-003)
+Los endpoints bajo `/api/games/trivia/...` exigen un **JWT Bearer** emitido por el emisor configurado en `Auth:Issuer` / `Auth:Audience` (sesión del Shell). El claim `sub` identifica al jugador.
 
-| Dato                  | Valor                                                                             |
-| --------------------- | --------------------------------------------------------------------------------- |
-| Nombre del remote     | `triviaGame`                                                                      |
-| Punto de entrada      | `http://localhost:4002/remoteEntry.js` (local)                                    |
-| Módulo expuesto       | `./GameModule`, que exporta la clase `GameModule` (elemento `trivia-game-module`) |
-| Prefijo de clases CSS | `trivia-game`                                                                     |
+- Lectura (`GET` historial, stats, resultado): política `TriviaRead` (jugador autenticado o cliente de máquina con permiso de escritura).
+- Escritura (`POST` resultados): política `TriviaWrite` (cliente M2M con permiso `game.trivia.results.write`).
 
-Entrada para el `remotes.config.json` del Shell:
+Sustituye `TU_TOKEN_JWT` por un token de prueba; **no** uses secretos de producción en ejemplos.
+
+Sin token, la API responde `401 Unauthorized`:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5185/api/games/trivia/players/user-demo/stats
+# 401
+```
+
+### Consultar estadísticas de un jugador
+
+```bash
+curl -s -X GET "http://localhost:5185/api/games/trivia/players/user-demo/stats" \
+  -H "Authorization: Bearer TU_TOKEN_JWT" \
+  -H "Accept: application/json"
+```
+
+Ejemplo de cuerpo (forma real del DTO `PlayerStatsResponse`):
+
+```json
+{
+  "userId": "user-demo",
+  "matchesPlayed": 2,
+  "wins": 1,
+  "averageScore": 200,
+  "bestScore": 300
+}
+```
+
+Si el `sub` del token no coincide con `user-demo` (y no eres cliente writer), la API responde `403 Forbidden`.
+
+### Consultar historial de partidas
+
+```bash
+curl -s -X GET "http://localhost:5185/api/games/trivia/players/user-demo/history" \
+  -H "Authorization: Bearer TU_TOKEN_JWT" \
+  -H "Accept: application/json"
+```
+
+Devuelve un arreglo de `MatchResultResponse` (más reciente primero).
+
+### Obtener el resultado de una partida
+
+```bash
+curl -s -X GET "http://localhost:5185/api/games/trivia/results/match-demo-001" \
+  -H "Authorization: Bearer TU_TOKEN_JWT" \
+  -H "Accept: application/json"
+```
+
+- `200` + JSON si existe y tienes permiso.
+- `404` si no hay partida con ese `matchId`.
+- `403` si no participaste y no eres writer.
+
+### Guardar un resultado de partida (escritura M2M)
+
+Requiere token de cliente de servicio con permiso de escritura (no el token de un jugador normal).
+
+```bash
+curl -s -X POST "http://localhost:5185/api/games/trivia/results" \
+  -H "Authorization: Bearer TU_TOKEN_M2M" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{
+    "matchId": "match-demo-001",
+    "gameType": "trivia",
+    "startedAt": "2026-10-29T18:00:00Z",
+    "finishedAt": "2026-10-29T18:10:00Z",
+    "winnerUserId": "user-a",
+    "isTie": false,
+    "decidedByTiebreak": false,
+    "metadata": {},
+    "players": [
+      {
+        "userId": "user-a",
+        "displayName": "Ana",
+        "score": 300,
+        "correctAnswers": 7,
+        "correctAnswersTimeMs": 45000,
+        "position": 1
+      },
+      {
+        "userId": "user-b",
+        "displayName": "Bruno",
+        "score": 150,
+        "correctAnswers": 4,
+        "correctAnswersTimeMs": 52000,
+        "position": 2
+      }
+    ]
+  }'
+```
+
+Respuesta esperada: `201 Created` con el mismo resultado en el cuerpo. Si `matchId` ya existe: `409 Conflict`.
+
+### Qué no hay como REST
+
+- **No** existen endpoints HTTP públicos de listado de preguntas ni de categorías. El banco de preguntas vive en SQL Server y se entrega durante la partida por **SignalR** (no es un `GET` REST).
+- La partida en vivo usa WebSockets / SignalR, no `curl` REST convencional:
+
+| Hub | Ruta | Auth |
+|---|---|---|
+| Partida con Shell | `/hubs/trivia` | JWT (`access_token` en query al negociar) |
+| Modo práctica / Playground | `/hubs/trivia/practice` | Anónimo (`AllowAnonymous`) |
+
+Para ejercitar el Playground usa el frontend en `http://localhost:4002` (botón de modo práctica), no un `curl` HTTP a las preguntas.
+
+---
+
+## Integración con el Shell (Module Federation, ADR-003)
+
+| Dato | Valor |
+| --- | --- |
+| Nombre del remote | `triviaGame` |
+| Punto de entrada | `http://localhost:4002/remoteEntry.js` |
+| Módulo expuesto | `./GameModule` (elemento `trivia-game-module`) |
+| Prefijo CSS | `trivia-game` |
 
 ```json
 {
@@ -209,63 +357,36 @@ Entrada para el `remotes.config.json` del Shell:
 }
 ```
 
-Para probarlo dentro del Shell se puede usar la prueba de concepto del Equipo 3 ([battlehub-shell/poc](https://github.com/KeynerMC/battlehub-shell/tree/main/poc)): con `npm start` corriendo aquí, poner esa entrada en `poc/shell/config/remotes.local.json` y `gameType: 'trivia'` en `poc/shell/src/my-app.ts`. Capturas de esa prueba: `docs/evidencias/adr-003/`.
+Con Compose arriba, el Shell puede cargar ese `remoteEntry.js`. Evidencias: `docs/evidencias/adr-003/`.
 
-Si se usa otro paquete `@aurelia/*` además de los de `mf-shared.js`, hay que agregarlo ahí y avisar al Equipo 3.
+---
 
-#### Pruebas
+## Pull Requests
 
-Las pruebas viven en `src/trivia-frontend/test/`, dentro del proyecto como en la plantilla del ADR-003, y repiten las carpetas de `src/` (por ejemplo, `test/dev/` prueba `src/dev/`). No necesitan configuración especial: Jest las busca en `test/` y `npm run lint` las revisa junto con `src/`.
+Los títulos de PR deben seguir [Conventional Commits](https://www.conventionalcommits.org/), por ejemplo:
 
-## Cobertura de código
+- `feat: implementar modo playground`
+- `fix(api): corregir conflicto al guardar resultado`
+- `docs: actualizar instrucciones de Docker Compose`
+- `ci: validar títulos semánticos de Pull Requests`
 
-El CI mide la cobertura de líneas en cada ejecución:
+Hay plantilla en [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) y un workflow que valida el formato al abrir o editar un PR. Los títulos históricos fuera de convención están listados (sin renombrar) en [docs/pr-titulos-historicos.md](docs/pr-titulos-historicos.md).
 
-- **Backend:** las pruebas unitarias y de integración se ejecutan con `--collect:"XPlat Code Coverage"` (coverlet) y ReportGenerator une los dos reportes. El detalle por clase queda en el resumen del job `backend` en GitHub Actions. No se cuenta el código que genera el compilador (`*.g.cs`, `*.generated.cs`), como `OpenApiXmlCommentSupport.generated.cs` de `Microsoft.AspNetCore.OpenApi`: no lo escribe el equipo y se crea en `obj/` al compilar.
-- **Frontend:** Jest genera `coverage/coverage-summary.json` (y el reporte HTML en `coverage/lcov-report/`).
-- **En cada pull request**, el job `coverage-comment` publica un comentario con la cobertura de backend y frontend, y lo actualiza en cada push en vez de crear uno nuevo.
+---
 
-El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `.github/workflows/ci.yml`), tanto en el backend como en el frontend. Con `ENFORCE_COVERAGE: "true"`, si alguna de las dos partes queda por debajo, su job (`backend` o `frontend`) falla y el PR no pasa el CI. Exactamente 85 % cumple.
+## Desarrollo y CI (solo contribuidores)
 
-Para ver la cobertura localmente:
+Estas herramientas **no** sustituyen `docker compose up` para levantar el sistema. Sirven para editar código, correr pruebas o el pipeline.
 
-```bash
-# Backend (desde la raíz del repositorio)
-dotnet tool restore
-dotnet test tests/BattleHub.Trivia.UnitTests --collect:"XPlat Code Coverage" --results-directory coverage/raw
-dotnet test tests/BattleHub.Trivia.IntegrationTests --collect:"XPlat Code Coverage" --results-directory coverage/raw
-dotnet reportgenerator "-reports:coverage/raw/**/coverage.cobertura.xml" -targetdir:coverage/backend -reporttypes:Html "-filefilters:-*.g.cs;-*.generated.cs"
-# abrir coverage/backend/index.html
+- Backend: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0) — `dotnet test tests/BattleHub.Trivia.UnitTests`
+- Frontend: [Node.js 22 LTS](https://nodejs.org/) (`>=22 <23`, `.nvmrc`) — desde `src/trivia-frontend`: `npm ci`, `npm test`, `npm run lint`
+- Integración: Testcontainers (hace falta Docker) o `TRIVIA_TEST_CONNECTION` apuntando a LocalDB
+- Secretos locales (fuera de Compose): [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets) en el proyecto Api; nunca en el repo
 
-# Frontend (desde src/trivia-frontend)
-npx jest
-# abrir coverage/lcov-report/index.html
-```
+### Cobertura
 
-## Configuración y secretos
+El CI mide cobertura de líneas. Mínimo **85 %** (`COVERAGE_THRESHOLD`). Con `ENFORCE_COVERAGE: "true"`, quedar por debajo falla el job.
 
-Ningún valor sensible (contraseñas, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles.
+### Configuración sensible
 
-| Clave en `appsettings.json`                                                 | Variable de entorno                                                  | ¿Sensible?                          | Dónde va                                                                                                                                                                                                      |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ConnectionStrings:Trivia`                                                  | `ConnectionStrings__Trivia`                                          | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                                                                                                               |
-| `Matchmaking:ClientSecret`                                                  | `Matchmaking__ClientSecret`                                          | **Sí**                              | Local: user-secrets. Docker o servidor: variable de entorno                                                                                                                                                   |
-| `Auth:Issuer`, `Auth:Audience`                                              | `Auth__Issuer`, `Auth__Audience`                                     | No                                  | `appsettings.json`: emisor y audiencia del token de sesión del Shell, acordados con Shell                                                                                                                     |
-| `Matchmaking:TokenEndpoint`, `Matchmaking:Audience`, `Matchmaking:ClientId` | `Matchmaking__TokenEndpoint`, etc.                                   | No: identificadores públicos        | `appsettings.json`: cliente de servicio de Trivia para avisar el fin de partida                                                                                                                               |
-| `Matchmaking:BaseUrl`, `Profile:BaseUrl`, `Cors:Origins`                    | `Matchmaking__BaseUrl`, `Profile__BaseUrl`, `Cors__Origins__0`, etc. | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                                                                                                                   |
-| `MSSQL_SA_PASSWORD`                                                         | `MSSQL_SA_PASSWORD`                                                  | **Sí**                              | Solo en `.env` para Docker Compose                                                                                                                                                                            |
-| `TRIVIA_API_URL` (frontend)                                                 | `TRIVIA_API_URL`                                                     | No                                  | Build-arg del frontend / variable antes de `npm start` o `npm run build`. En Compose: URL del navegador hacia la API                                                                                          |
-
-**En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno _Development_:
-
-```bash
-# Desde la raíz del repositorio
-dotnet user-secrets set "ConnectionStrings:Trivia" "Server=...;Database=BattleHubTrivia;..." --project src/BattleHub.Trivia.Api
-dotnet user-secrets list --project src/BattleHub.Trivia.Api
-```
-
-**En Docker o en un servidor**, copiar `.env.example` como `.env` (ignorado por git), completarlo ahí y pasarlo con `docker run --env-file .env ...`, o usar la configuración de secretos del servidor.
-
-**Revisión automática:** el job `secrets` del CI ejecuta [gitleaks](https://github.com/gitleaks/gitleaks) sobre todo el historial en cada pull request y en cada push a `main`. Si encuentra un secreto, el job falla y el PR no se puede mergear. Para revisarlo antes de subir cambios: `gitleaks git .` desde la raíz del repositorio.
-
-**Si se sube un secreto por error**, hay que considerarlo expuesto: borrarlo del código no alcanza, porque sigue en el historial. Hay que cambiarlo de inmediato (por ejemplo, revocar el token expuesto y generar uno nuevo) y avisar al equipo. Si gitleaks marca algo que no es un secreto, se agrega su _fingerprint_ a `.gitleaksignore`, explicando el motivo en el PR.
+Ningún valor sensible se escribe en el repositorio. `appsettings.json` deja vacíos los secretos. El job `secrets` del CI ejecuta [gitleaks](https://github.com/gitleaks/gitleaks) sobre el historial.
