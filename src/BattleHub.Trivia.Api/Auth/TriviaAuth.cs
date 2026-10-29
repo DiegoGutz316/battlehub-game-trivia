@@ -18,26 +18,34 @@ public static class TriviaAuth
     // Token con el que se autenticó la petición o la conexión al hub (el navegador lo envía en access_token).
     public static string AccessToken(HttpContext? http)
     {
-        if (http is null) return "";
+        if (http is null)
+        {
+            return "";
+        }
+
         var header = http.Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return header["Bearer ".Length..].Trim();
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return header["Bearer ".Length..].Trim();
+        }
+
         return http.Request.Path.StartsWithSegments("/hubs/trivia") ? http.Request.Query["access_token"].ToString() : "";
     }
 
     public static IServiceCollection AddTriviaAuth(
     this IServiceCollection services,
     IConfiguration config)
-{
-    var issuer = config["Auth:Issuer"];
-    var audience = config["Auth:Audience"];
-
-    if (!Uri.TryCreate(issuer, UriKind.Absolute, out var issuerUri) ||
-        issuerUri.Scheme != Uri.UriSchemeHttps ||
-        string.IsNullOrWhiteSpace(audience))
     {
-        throw new InvalidOperationException(
-            "Configurar Auth:Issuer (URL https del emisor de los tokens del Shell) y Auth:Audience.");
-    }
+        var issuer = config["Auth:Issuer"];
+        var audience = config["Auth:Audience"];
+
+        if (!Uri.TryCreate(issuer, UriKind.Absolute, out var issuerUri) ||
+            issuerUri.Scheme != Uri.UriSchemeHttps ||
+            string.IsNullOrWhiteSpace(audience))
+        {
+            throw new InvalidOperationException(
+                "Configurar Auth:Issuer (URL https del emisor de los tokens del Shell) y Auth:Audience.");
+        }
 
         services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -79,26 +87,26 @@ public static class TriviaAuth
                 };
             });
 
-    services.AddAuthorization(options =>
-    {
-        options.AddPolicy(Play, p =>
-            p.RequireAuthenticatedUser()
-             .RequireAssertion(c =>
-                 !IsMachine(c.User) &&
-                 UserId(c.User).Length > 0));
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(Play, p =>
+                p.RequireAuthenticatedUser()
+                 .RequireAssertion(c =>
+                     !IsMachine(c.User) &&
+                     UserId(c.User).Length > 0));
 
-        options.AddPolicy(Read, p =>
-            p.RequireAuthenticatedUser()
-             .RequireAssertion(c =>
-                 (!IsMachine(c.User) &&
-                  UserId(c.User).Length > 0) ||
-                 IsWriter(c.User)));
+            options.AddPolicy(Read, p =>
+                p.RequireAuthenticatedUser()
+                 .RequireAssertion(c =>
+                     (!IsMachine(c.User) &&
+                      UserId(c.User).Length > 0) ||
+                     IsWriter(c.User)));
 
-        options.AddPolicy(Write, p =>
-            p.RequireAuthenticatedUser()
-             .RequireAssertion(c => IsWriter(c.User)));
-    });
+            options.AddPolicy(Write, p =>
+                p.RequireAuthenticatedUser()
+                 .RequireAssertion(c => IsWriter(c.User)));
+        });
 
-    return services;
-}
+        return services;
+    }
 }

@@ -22,21 +22,36 @@ public sealed class ProfileGateway(HttpClient http, IConfiguration config) : IPr
     {
         var origin = config["Profile:BaseUrl"];
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https") || uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0)
+        {
             throw new InvalidOperationException("Configurar Profile:BaseUrl.");
+        }
+
         return new Uri(uri.AbsoluteUri.TrimEnd('/') + path);
     }
 
     public async Task<bool> CanPlayAsync(string accessToken, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(accessToken) || accessToken.Length > 16000) return false;
+        if (string.IsNullOrWhiteSpace(accessToken) || accessToken.Length > 16000)
+        {
+            return false;
+        }
+
         using var request = new HttpRequestMessage(HttpMethod.Get, Url("/api/profiles/me/permissions"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         try
         {
             using var response = await http.SendAsync(request, ct);
             // 404: el jugador todavía no tiene perfil en Profile.
-            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound) return false;
-            if (!response.IsSuccessStatusCode) throw new HubException("PROFILE_UNAVAILABLE");
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HubException("PROFILE_UNAVAILABLE");
+            }
+
             var body = await response.Content.ReadFromJsonAsync<PermissionsResponse>(cancellationToken: ct);
             return body?.Permissions?.Contains(PlayPermission, StringComparer.Ordinal) == true;
         }

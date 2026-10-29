@@ -149,7 +149,7 @@ Crea la tabla **`FinishNotifications`**, la cola de avisos de fin de partida que
 
 Las columnas `Id` no tienen un valor por defecto en la base de datos. El Guid lo asigna Entity Framework Core en la aplicación, al agregar la entidad (`Add`) y antes de `SaveChanges`. Con SQL Server, EF genera Guids secuenciales, que fragmentan menos el índice de la llave primaria que los Guids aleatorios.
 
-La carga inicial de preguntas la hace `QuestionSeeder` (`src/BattleHub.Trivia.Data/Seed/`): agrega cada pregunta con sus opciones mediante EF, que genera los `Id` y llena `QuestionRefId`. Si alguna vez se insertan filas directamente con SQL, hay que incluir el valor de `Id` (y, en las tablas hijas, el de la llave foránea `QuestionRefId` o `MatchRefId`).
+La carga inicial de preguntas la hace el proceso independiente `BattleHub.Trivia.DbInit` con `InitialDataGenerator` (`src/BattleHub.Trivia.Data/Seed/`), no las migraciones ni el arranque de la API. Agrega cada pregunta con sus opciones mediante EF, que genera los `Id` y llena `QuestionRefId`. Si alguna vez se insertan filas directamente con SQL, hay que incluir el valor de `Id` (y, en las tablas hijas, el de la llave foránea `QuestionRefId` o `MatchRefId`).
 
 ## Comandos
 

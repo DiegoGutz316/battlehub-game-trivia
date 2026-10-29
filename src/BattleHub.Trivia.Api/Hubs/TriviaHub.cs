@@ -14,10 +14,17 @@ public sealed class TriviaHub(TriviaSessions sessions, IMatchmakingGateway match
 {
     public async Task JoinMatch(JoinRequest request)
     {
-        if (Context.Items.ContainsKey("room") && Context.Items["room"] as string != request.MatchId) throw new HubException("PLAYER_NOT_IN_MATCH");
+        if (Context.Items.ContainsKey("room") && Context.Items["room"] as string != request.MatchId)
+        {
+            throw new HubException("PLAYER_NOT_IN_MATCH");
+        }
+
         var id = TriviaAuth.UserId(Context.User!);
         if (!await profiles.CanPlayAsync(TriviaAuth.AccessToken(Context.GetHttpContext()), Context.ConnectionAborted))
+        {
             throw new HubException("PERMISSION_DENIED");
+        }
+
         var room = await matchmaking.ValidateAsync(request.MatchId, id, request.MatchmakingAccessToken, Context.ConnectionAborted);
         await Groups.AddToGroupAsync(Context.ConnectionId, request.MatchId);
         try
@@ -34,12 +41,20 @@ public sealed class TriviaHub(TriviaSessions sessions, IMatchmakingGateway match
     }
     public Task SubmitAnswer(AnswerRequest request)
     {
-        if (!Context.Items.TryGetValue("room", out var room) || room as string != request.MatchId) throw new HubException("PLAYER_NOT_IN_MATCH");
+        if (!Context.Items.TryGetValue("room", out var room) || room as string != request.MatchId)
+        {
+            throw new HubException("PLAYER_NOT_IN_MATCH");
+        }
+
         return sessions.AnswerAsync(request, TriviaAuth.UserId(Context.User!), Context.ConnectionId, Context.ConnectionAborted);
     }
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        if (Context.Items.TryGetValue("room", out var room) && room is string id) await sessions.DisconnectAsync(id, Context.ConnectionId);
+        if (Context.Items.TryGetValue("room", out var room) && room is string id)
+        {
+            await sessions.DisconnectAsync(id, Context.ConnectionId);
+        }
+
         await base.OnDisconnectedAsync(exception);
     }
 }

@@ -1,0 +1,86 @@
+# Actualiza el comentario de cobertura del PR cuando termina CI Backend o CI Frontend.
+name: CI Coverage Comment
+
+on:
+  workflow_run:
+    workflows: ["CI Backend", "CI Frontend"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  coverage-comment:
+    name: coverage-comment
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: coverage-*
+          path: coverage
+
+      - name: Resolve PR
+        id: pr
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const prs = run.pull_requests || [];
+            if (prs.length > 0) {
+              core.setOutput('number', String(prs[0].number));
+              core.setOutput('sha', prs[0].head.sha);
+              return;
+            }
+            const { owner, repo } = context.repo;
+            const headOwner = run.head_repository?.owner?.login || owner;
+            const pulls = await github.rest.pulls.list({
+              owner, repo, state: 'open', head: `${headOwner}:${run.head_branch}`
+            });
+            if (!pulls.data.length) {
+              core.setOutput('number', '');
+              return;
+            }
+            core.setOutput('number', String(pulls.data[0].number));
+            core.setOutput('sha', pulls.data[0].head.sha);
+
+      - name: Build comment markdown
+        if: steps.pr.outputs.number != ''
+        env:
+          HEAD_SHA: ${{ steps.pr.outputs.sha }}
+          COVERAGE_THRESHOLD: "85"
+          ENFORCE_COVERAGE: "true"
+        run: |
+          node .github/scripts/coverage.mjs comment \
+            coverage/coverage-backend/Summary.json \
+            coverage/coverage-frontend/coverage-summary.json \
+            coverage-comment.md
+
+      - name: Post or update comment
+        if: steps.pr.outputs.number != ''
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('coverage-comment.md')) return;
+            const body = fs.readFileSync('coverage-comment.md', 'utf8');
+            const marker = '<!-- trivia-coverage-report -->';
+            const { owner, repo } = context.repo;
+            const issue_number = Number('${{ steps.pr.outputs.number }}');
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+            const previous = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Threading.Channels;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Api.Matchmaking;
@@ -56,7 +56,11 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
         Assert.False((await db.FinishNotifications.AsNoTracking().SingleAsync(p => p.MatchId == id, ct)).Delivered);
         var worker = new FinishWorker(factory.Services.GetRequiredService<IServiceScopeFactory>(),
             factory.Services.GetRequiredService<IMatchmakingGateway>(), factory.Clock, NullLogger<FinishWorker>.Instance);
-        for (var i = 0; i < 5; i++) await worker.DispatchAsync(ct);
+        for (var i = 0; i < 5; i++)
+        {
+            await worker.DispatchAsync(ct);
+        }
+
         Assert.True((await db.FinishNotifications.AsNoTracking().SingleAsync(p => p.MatchId == id, ct)).Delivered);
     }
 

@@ -20,7 +20,7 @@ public sealed class PracticeHub(
             displayName,
             Context.ConnectionAborted);
 
-        
+
         await sessions.AttachConnectionAsync(
             matchId,
             secret,
@@ -43,68 +43,68 @@ public sealed class PracticeHub(
         };
     }
 
-    
 
-public async Task<object> SubmitPracticeAnswer(
-    string matchId,
-    string secret,
-    string questionId,
-    string answerId)
-{
-    if (!Context.Items.TryGetValue("practice", out var currentMatch)
-        || currentMatch is not string activeMatchId
-        || activeMatchId != matchId)
+
+    public async Task<object> SubmitPracticeAnswer(
+        string matchId,
+        string secret,
+        string questionId,
+        string answerId)
     {
-        throw new HubException("PRACTICE_NOT_JOINED");
-    }
+        if (!Context.Items.TryGetValue("practice", out var currentMatch)
+            || currentMatch is not string activeMatchId
+            || activeMatchId != matchId)
+        {
+            throw new HubException("PRACTICE_NOT_JOINED");
+        }
 
-    return await sessions.AnswerAsync(
-        matchId,
-        secret,
-        Context.ConnectionId,
-        questionId,
-        answerId,
-        Context.ConnectionAborted);
-}
-
-
-public override async Task OnDisconnectedAsync(
-    Exception? exception)
-{
-    if (Context.Items.TryGetValue(
-            "practice",
-            out var currentMatch) &&
-        currentMatch is string matchId)
-    {
-        await sessions.DetachConnectionAsync(
+        return await sessions.AnswerAsync(
             matchId,
-            Context.ConnectionId);
+            secret,
+            Context.ConnectionId,
+            questionId,
+            answerId,
+            Context.ConnectionAborted);
     }
 
-    await base.OnDisconnectedAsync(exception);
-}
 
-public async Task<object> ReconnectPractice(
-    string matchId,
-    string secret)
-{
-    if (Context.Items.ContainsKey("practice"))
+    public override async Task OnDisconnectedAsync(
+        Exception? exception)
     {
-        throw new HubException("PRACTICE_ALREADY_JOINED");
+        if (Context.Items.TryGetValue(
+                "practice",
+                out var currentMatch) &&
+            currentMatch is string matchId)
+        {
+            await sessions.DetachConnectionAsync(
+                matchId,
+                Context.ConnectionId);
+        }
+
+        await base.OnDisconnectedAsync(exception);
     }
 
-    await sessions.AttachConnectionAsync(
-        matchId,
-        secret,
-        Context.ConnectionId,
-        Context.ConnectionAborted);
+    public async Task<object> ReconnectPractice(
+        string matchId,
+        string secret)
+    {
+        if (Context.Items.ContainsKey("practice"))
+        {
+            throw new HubException("PRACTICE_ALREADY_JOINED");
+        }
 
-    Context.Items["practice"] = matchId;
+        await sessions.AttachConnectionAsync(
+            matchId,
+            secret,
+            Context.ConnectionId,
+            Context.ConnectionAborted);
 
-    return await sessions.GetStateAsync(
-        matchId,
-        secret,
-        Context.ConnectionAborted);
-}
+        Context.Items["practice"] = matchId;
+
+        return await sessions.GetStateAsync(
+            matchId,
+            secret,
+            Context.ConnectionAborted);
+    }
 
 }

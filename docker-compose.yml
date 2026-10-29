@@ -1,0 +1,119 @@
+# Trivia Battle — arranque completo con un solo comando:
+#   cp .env.example .env   # una sola vez; editar contraseñas
+#   docker compose up --build
+#
+# Apagado (conserva el volumen de SQL Server):
+#   docker compose down
+
+name: battlehub-trivia
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
+    environment:
+      ACCEPT_EULA: ${ACCEPT_EULA:-Y}
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Definir MSSQL_SA_PASSWORD en el archivo .env}
+    ports:
+      - "1433:1433"
+    volumes:
+      - trivia-sql-data:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" -b -o /dev/null || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" -b -o /dev/null || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 40s
+    networks:
+      - trivia
+
+  # Etapa 2: esquema (migraciones EF). Proceso one-shot; no arranca la API.
+  db-migrate:
+    build:
+      context: .
+      dockerfile: src/BattleHub.Trivia.DbInit/Dockerfile
+    image: battlehub-trivia-dbinit:local
+    command: ["migrate"]
+    environment:
+      ConnectionStrings__Trivia: ${ConnectionStrings__Trivia:?Definir ConnectionStrings__Trivia en el archivo .env}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - trivia
+
+  # Etapa 3: generación independiente de datos iniciales (banco de preguntas).
+  # No reutiliza el arranque de la API ni confunde migraciones con seed.
+  db-seed:
+    image: battlehub-trivia-dbinit:local
+    build:
+      context: .
+      dockerfile: src/BattleHub.Trivia.DbInit/Dockerfile
+    command: ["seed"]
+    environment:
+      ConnectionStrings__Trivia: ${ConnectionStrings__Trivia:?Definir ConnectionStrings__Trivia en el archivo .env}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - trivia
+
+  # Etapa 4a: API. Arranca solo cuando el esquema y los datos ya están listos.
+  api:
+    build:
+      context: .
+      dockerfile: src/BattleHub.Trivia.Api/Dockerfile
+    image: battlehub-trivia-api:local
+    ports:
+      - "5185:8080"
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Trivia: ${ConnectionStrings__Trivia:?Definir ConnectionStrings__Trivia en el archivo .env}
+      Cors__Origins__0: http://localhost:4000
+      Cors__Origins__1: http://localhost:4002
+    depends_on:
+      db-seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail --silent http://localhost:8080/health | grep -q Healthy || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - trivia
+
+  # Etapa 4b: microfrontend. El navegador llama a la API por localhost:5185
+  # (TRIVIA_API_URL se fija al construir la imagen).
+  frontend:
+    build:
+      context: src/trivia-frontend
+      dockerfile: Dockerfile
+      args:
+        TRIVIA_API_URL: ${TRIVIA_API_URL:-http://localhost:5185}
+    image: battlehub-trivia-frontend:local
+    ports:
+      - "4002:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - trivia
+
+volumes:
+  trivia-sql-data:
+
+networks:
+  trivia:
+    driver: bridge

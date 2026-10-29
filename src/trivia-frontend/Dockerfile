@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Etapa 1: compila el microfrontend con la versión de Node de .nvmrc.
-FROM node:24-alpine AS build
+# Etapa 1: compila el microfrontend con la versión de Node de .nvmrc (Node.js 22).
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund

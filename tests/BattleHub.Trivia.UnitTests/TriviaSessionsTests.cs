@@ -88,33 +88,33 @@ public sealed class TriviaSessionsTests
     private static ISingleClientProxy CreateProxy(
     string recipient,
     List<Message> messages)
-{
-    var proxy = Substitute.For<ISingleClientProxy>();
+    {
+        var proxy = Substitute.For<ISingleClientProxy>();
 
-    proxy
-        .SendCoreAsync(
-            Arg.Any<string>(),
-            Arg.Any<object?[]>(),
-            Arg.Any<CancellationToken>())
-        .Returns(call =>
-        {
-            var method = call.ArgAt<string>(0);
-            var args = call.ArgAt<object?[]>(1);
+        proxy
+            .SendCoreAsync(
+                Arg.Any<string>(),
+                Arg.Any<object?[]>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var method = call.ArgAt<string>(0);
+                var args = call.ArgAt<object?[]>(1);
 
-            messages.Add(new Message(
-                recipient,
-                method,
-                JsonSerializer.SerializeToElement(
-                    args[0],
-                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                )
-            ));
+                messages.Add(new Message(
+                    recipient,
+                    method,
+                    JsonSerializer.SerializeToElement(
+                        args[0],
+                        new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    )
+                ));
 
-            return Task.CompletedTask;
-        });
+                return Task.CompletedTask;
+            });
 
-    return proxy;
-}
+        return proxy;
+    }
 
     private static IHubClients CreateClients(List<Message> messages)
     {

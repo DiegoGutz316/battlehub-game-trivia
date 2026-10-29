@@ -19,13 +19,16 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString(ConnectionStringName);
         if (string.IsNullOrWhiteSpace(connectionString))
+        {
             connectionString = LocalFallbackConnectionString;
+        }
 
         services.AddDbContext<TriviaDbContext>(options =>
             TriviaDbContext.ConfigureSqlServer(options, connectionString));
 
         services.AddScoped<IResultRepository, ResultRepository>();
         services.AddScoped<IQuestionRepository, QuestionRepository>();
+        services.AddScoped<InitialDataGenerator>();
         services.AddScoped<QuestionSeeder>();
 
         return services;

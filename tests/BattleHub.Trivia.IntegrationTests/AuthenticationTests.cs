@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Headers;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Data.Context;
@@ -89,9 +89,13 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TriviaDbContext>();
         var id = "outbox-" + Guid.NewGuid().ToString("N");
-        await new ResultRepository(db).SaveAsync(new MatchResult {
-            MatchId = id, StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1), FinishedAt = DateTimeOffset.UtcNow,
-            Players = [new PlayerResult { UserId = "player-one", DisplayName = "Jugador", Position = 1 }], WinnerUserId = "player-one"
+        await new ResultRepository(db).SaveAsync(new MatchResult
+        {
+            MatchId = id,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            FinishedAt = DateTimeOffset.UtcNow,
+            Players = [new PlayerResult { UserId = "player-one", DisplayName = "Jugador", Position = 1 }],
+            WinnerUserId = "player-one"
         });
         var pending = await db.FinishNotifications.AsNoTracking().SingleAsync(item => item.MatchId == id);
         Assert.False(pending.Delivered);

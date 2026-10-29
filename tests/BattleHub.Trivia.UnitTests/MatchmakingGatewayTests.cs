@@ -1,4 +1,4 @@
-﻿
+
 using System.Net;
 using System.Net.Http.Json;
 using BattleHub.Trivia.Api.Matchmaking;
@@ -191,160 +191,160 @@ public sealed class MatchmakingGatewayTests
     }
 
     [Theory]
-[InlineData("", "room-token")]
-[InlineData(" ", "room-token")]
-[InlineData("room", "")]
-[InlineData("room", " ")]
-public async Task ValidateRejectsEmptyMatchIdOrToken(
+    [InlineData("", "room-token")]
+    [InlineData(" ", "room-token")]
+    [InlineData("room", "")]
+    [InlineData("room", " ")]
+    public async Task ValidateRejectsEmptyMatchIdOrToken(
     string matchId,
     string token)
-{
-    using var http = new HttpClient(new Handler(_ =>
-        throw new Exception("No debería llamar a Matchmaking")));
+    {
+        using var http = new HttpClient(new Handler(_ =>
+            throw new Exception("No debería llamar a Matchmaking")));
 
-    var gateway = new MatchmakingGateway(
-        http,
-        Config,
-        TimeProvider.System,
-        NullLogger<MatchmakingGateway>.Instance,
-        new FakeTokenProvider());
+        var gateway = new MatchmakingGateway(
+            http,
+            Config,
+            TimeProvider.System,
+            NullLogger<MatchmakingGateway>.Instance,
+            new FakeTokenProvider());
 
-    var exception = await Assert.ThrowsAsync<HubException>(() =>
-        gateway.ValidateAsync(
-            matchId,
-            "player-one",
-            token,
-            default));
+        var exception = await Assert.ThrowsAsync<HubException>(() =>
+            gateway.ValidateAsync(
+                matchId,
+                "player-one",
+                token,
+                default));
 
-    Assert.Equal("UNAUTHORIZED", exception.Message);
-}
+        Assert.Equal("UNAUTHORIZED", exception.Message);
+    }
 
-[Theory]
-[InlineData(401)]
-[InlineData(404)]
-[InlineData(500)]
-public async Task ValidateRejectsMatchmakingErrors(int statusCode)
-{
-    using var http = new HttpClient(new Handler(_ =>
-        new HttpResponseMessage((HttpStatusCode)statusCode)));
+    [Theory]
+    [InlineData(401)]
+    [InlineData(404)]
+    [InlineData(500)]
+    public async Task ValidateRejectsMatchmakingErrors(int statusCode)
+    {
+        using var http = new HttpClient(new Handler(_ =>
+            new HttpResponseMessage((HttpStatusCode)statusCode)));
 
-    var gateway = new MatchmakingGateway(
-        http,
-        Config,
-        TimeProvider.System,
-        NullLogger<MatchmakingGateway>.Instance,
-        new FakeTokenProvider());
+        var gateway = new MatchmakingGateway(
+            http,
+            Config,
+            TimeProvider.System,
+            NullLogger<MatchmakingGateway>.Instance,
+            new FakeTokenProvider());
 
-    var exception = await Assert.ThrowsAsync<HubException>(() =>
-        gateway.ValidateAsync(
-            "room",
-            "player-one",
-            "room-token",
-            default));
+        var exception = await Assert.ThrowsAsync<HubException>(() =>
+            gateway.ValidateAsync(
+                "room",
+                "player-one",
+                "room-token",
+                default));
 
-    Assert.Equal("MATCH_NOT_FOUND", exception.Message);
-}
+        Assert.Equal("MATCH_NOT_FOUND", exception.Message);
+    }
 
-[Fact]
-public async Task ValidateRejectsDifferentMatchId()
-{
-    using var http = new HttpClient(new Handler(_ =>
-        new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = JsonContent.Create(
-                new MatchRoom(
-                    "another-room",
-                    "trivia",
-                    "Started",
-                    [new("player-one", "Uno")]))
-        }));
+    [Fact]
+    public async Task ValidateRejectsDifferentMatchId()
+    {
+        using var http = new HttpClient(new Handler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(
+                    new MatchRoom(
+                        "another-room",
+                        "trivia",
+                        "Started",
+                        [new("player-one", "Uno")]))
+            }));
 
-    var gateway = new MatchmakingGateway(
-        http,
-        Config,
-        TimeProvider.System,
-        NullLogger<MatchmakingGateway>.Instance,
-        new FakeTokenProvider());
+        var gateway = new MatchmakingGateway(
+            http,
+            Config,
+            TimeProvider.System,
+            NullLogger<MatchmakingGateway>.Instance,
+            new FakeTokenProvider());
 
-    var exception = await Assert.ThrowsAsync<HubException>(() =>
-        gateway.ValidateAsync(
-            "room",
-            "player-one",
-            "room-token",
-            default));
+        var exception = await Assert.ThrowsAsync<HubException>(() =>
+            gateway.ValidateAsync(
+                "room",
+                "player-one",
+                "room-token",
+                default));
 
-    Assert.Equal("MATCH_NOT_FOUND", exception.Message);
-}
+        Assert.Equal("MATCH_NOT_FOUND", exception.Message);
+    }
 
-[Fact]
-public async Task ValidateRejectsDuplicateParticipants()
-{
-    using var http = new HttpClient(new Handler(_ =>
-        new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = JsonContent.Create(
-                new MatchRoom(
-                    "room",
-                    "trivia",
-                    "Started",
-                    [
-                        new("player-one", "Uno"),
+    [Fact]
+    public async Task ValidateRejectsDuplicateParticipants()
+    {
+        using var http = new HttpClient(new Handler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(
+                    new MatchRoom(
+                        "room",
+                        "trivia",
+                        "Started",
+                        [
+                            new("player-one", "Uno"),
                         new("player-one", "Duplicado")
-                    ]))
-        }));
+                        ]))
+            }));
 
-    var gateway = new MatchmakingGateway(
-        http,
-        Config,
-        TimeProvider.System,
-        NullLogger<MatchmakingGateway>.Instance,
-        new FakeTokenProvider());
+        var gateway = new MatchmakingGateway(
+            http,
+            Config,
+            TimeProvider.System,
+            NullLogger<MatchmakingGateway>.Instance,
+            new FakeTokenProvider());
 
-    var exception = await Assert.ThrowsAsync<HubException>(() =>
-        gateway.ValidateAsync(
-            "room",
-            "player-one",
-            "room-token",
-            default));
+        var exception = await Assert.ThrowsAsync<HubException>(() =>
+            gateway.ValidateAsync(
+                "room",
+                "player-one",
+                "room-token",
+                default));
 
-    Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
-}
+        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
+    }
 
-[Theory]
-[InlineData("", "Jugador")]
-[InlineData(" ", "Jugador")]
-[InlineData("player-one", "")]
-[InlineData("player-one", " ")]
-public async Task ValidateRejectsInvalidParticipantData(
-    string userId,
-    string displayName)
-{
-    using var http = new HttpClient(new Handler(_ =>
-        new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = JsonContent.Create(
-                new MatchRoom(
-                    "room",
-                    "trivia",
-                    "Started",
-                    [new(userId, displayName)]))
-        }));
+    [Theory]
+    [InlineData("", "Jugador")]
+    [InlineData(" ", "Jugador")]
+    [InlineData("player-one", "")]
+    [InlineData("player-one", " ")]
+    public async Task ValidateRejectsInvalidParticipantData(
+        string userId,
+        string displayName)
+    {
+        using var http = new HttpClient(new Handler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(
+                    new MatchRoom(
+                        "room",
+                        "trivia",
+                        "Started",
+                        [new(userId, displayName)]))
+            }));
 
-    var gateway = new MatchmakingGateway(
-        http,
-        Config,
-        TimeProvider.System,
-        NullLogger<MatchmakingGateway>.Instance,
-        new FakeTokenProvider());
+        var gateway = new MatchmakingGateway(
+            http,
+            Config,
+            TimeProvider.System,
+            NullLogger<MatchmakingGateway>.Instance,
+            new FakeTokenProvider());
 
-    var exception = await Assert.ThrowsAsync<HubException>(() =>
-        gateway.ValidateAsync(
-            "room",
-            "player-one",
-            "room-token",
-            default));
+        var exception = await Assert.ThrowsAsync<HubException>(() =>
+            gateway.ValidateAsync(
+                "room",
+                "player-one",
+                "room-token",
+                default));
 
-    Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
-}
+        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
+    }
 
 }
