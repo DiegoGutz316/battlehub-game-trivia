@@ -1,0 +1,7 @@
+# Falsos positivos: ejemplos documentales de curl en un commit previo del README
+# (placeholders TU_TOKEN_JWT / TU_TOKEN_M2M). No son secretos reales.
+# Regla: curl-auth-header. El README actual ya no usa esos encabezados literales.
+b211ea035ab60cef766a94e832bf528061b8a9a0:README.md:curl-auth-header:245
+b211ea035ab60cef766a94e832bf528061b8a9a0:README.md:curl-auth-header:267
+b211ea035ab60cef766a94e832bf528061b8a9a0:README.md:curl-auth-header:277
+b211ea035ab60cef766a94e832bf528061b8a9a0:README.md:curl-auth-header:291

@@ -20,91 +20,123 @@ Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://git
 ## Estructura
 
 ```text
-BattleHub.Trivia.slnx                → solución .NET (agrupa los 5 proyectos)
-docs/                                → documentación del equipo (reglas del juego, contratos internos)
-.github/workflows/                   → pipeline de CI (secretos, build, pruebas y cobertura)
-.env.example                         → nombres de las variables de configuración, sin valores reales
-.dockerignore                        → contexto de la imagen de la API: solo sus tres proyectos de .NET
+BattleHub.Trivia.slnx                → solución .NET
+docker-compose.yml                   → SQL Server + migraciones + seed + API + frontend
+.env.example                         → plantilla de variables (copiar a .env; no subir secretos)
+.dockerignore                        → contexto de las imágenes .NET (Api, Data, DbInit, Domain)
+docs/                                → documentación del equipo
+.github/workflows/                   → pipeline de CI
 src/
   BattleHub.Trivia.Api/              → backend .NET 10 (punto de entrada)
-    Dockerfile                       → imagen Docker de la API (se construye desde la raíz del repositorio)
-    Controllers/                     → endpoints REST /api/games/trivia/...
-    Hubs/                            → hub de SignalR /hubs/trivia
-    Services/                        → lógica del juego (preguntas, puntajes, ganador) y notificación a Matchmaking
-    Dtos/                            → modelos de entrada/salida de la API
-  BattleHub.Trivia.Domain/           → núcleo del dominio, sin dependencias de otros proyectos
-    Entities/                        → entidades (partida, jugador, resultado, pregunta)
-    Interfaces/                      → contratos de repositorios (ej. IResultRepository)
-  BattleHub.Trivia.Data/             → persistencia (depende de Domain)
-    Context/                         → contexto/conexión de la base de datos
-    Repositories/                    → implementaciones de las interfaces de Domain
-  trivia-frontend/                   → microfrontend Aurelia 2 (webpack + TypeScript), remote de Module Federation
-    mf-shared.js                     → dependencias compartidas con el Shell (ADR-003, no modificar)
-    src/game-module.*                → GameModule: lo que el Shell carga (initialize, start, pause, dispose)
-    src/contracts/                   → GameModule y GameContext (contrato de battlehub-contracts)
-    src/dev/                         → arnés de desarrollo que simula el Shell (solo para npm start)
-    src/components/                  → vistas del juego (pregunta, opciones, marcador)
-    src/services/                    → conexión al hub y cliente de la API
-    test/                            → pruebas del microfrontend (Jest, archivos *.spec.ts), con las mismas carpetas que src/
+    Dockerfile                       → imagen de la API (construir desde la raíz)
+  BattleHub.Trivia.DbInit/           → proceso independiente: migrate | seed
+    Dockerfile                       → imagen one-shot de esquema y datos
+  BattleHub.Trivia.Domain/           → dominio (entidades e interfaces)
+  BattleHub.Trivia.Data/             → EF Core, migraciones, InitialDataGenerator
+  trivia-frontend/                   → microfrontend Aurelia 2 + Dockerfile (nginx)
 tests/
-  BattleHub.Trivia.UnitTests/        → pruebas unitarias del backend (Category=Unit)
-  BattleHub.Trivia.IntegrationTests/ → pruebas de integración API + base de datos (Category=Integration)
+  BattleHub.Trivia.UnitTests/
+  BattleHub.Trivia.IntegrationTests/
 ```
 
-## Cómo correr localmente
+## Docker Compose (comando único)
+
+Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (o Docker Engine + Compose v2).
+
+Una sola vez, desde la raíz del repositorio:
+
+```bash
+cp .env.example .env
+# Editar .env: MSSQL_SA_PASSWORD y la misma contraseña dentro de ConnectionStrings__Trivia
+```
+
+Arranque completo (construye imágenes, crea contenedores, espera SQL Server, aplica migraciones, inserta las 30 preguntas, levanta API y frontend):
+
+```bash
+docker compose up --build
+```
+
+Apagado (conserva el volumen `trivia-sql-data`; los datos persisten):
+
+```bash
+docker compose down
+```
+
+| Servicio | URL / puerto | Rol |
+|---|---|---|
+| Frontend | http://localhost:4002 | Microfrontend (también `remoteEntry.js`) |
+| API | http://localhost:5185 | REST + SignalR (`/health` → `Healthy`) |
+| SQL Server | localhost:1433 | Persistencia (volumen `trivia-sql-data`) |
+
+Orden real de arranque:
+
+1. `sqlserver` — healthy cuando acepta `SELECT 1`.
+2. `db-migrate` — aplica las migraciones EF y termina.
+3. `db-seed` — inserta el banco de preguntas con `InitialDataGenerator` (idempotente) y termina.
+4. `api` — arranca solo cuando el seed terminó bien; no migra ni siembra.
+5. `frontend` — arranca cuando `/health` de la API responde `Healthy`.
+
+La generación de datos **no** ocurre en `Program.cs`. Es el servicio `db-seed` (`BattleHub.Trivia.DbInit seed`). Si se vuelve a ejecutar `docker compose up`, el seed no duplica preguntas.
+
+Logs:
+
+```bash
+docker compose logs -f api
+docker compose logs db-migrate
+docker compose logs db-seed
+```
+
+Problemas frecuentes:
+
+| Síntoma | Qué revisar |
+|---|---|
+| Compose pide `MSSQL_SA_PASSWORD` | Falta `.env` o la variable está vacía. |
+| Login de SQL falla | La contraseña de `ConnectionStrings__Trivia` debe ser la misma que `MSSQL_SA_PASSWORD`. |
+| El frontend no habla con la API | `TRIVIA_API_URL` debe ser la URL del **navegador** (`http://localhost:5185`), no el nombre del servicio Docker. Hay que reconstruir el frontend si se cambia. |
+| Matchmaking no recibe el fin de partida | Completar `Matchmaking__ClientSecret` en `.env`. |
+
+## Cómo correr localmente (sin Compose)
 
 ### Backend (.NET 10)
 
 Requisito: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
 
-La API acepta el token de la sesión del Shell: valida su firma con las claves que publica el emisor, sin claves configuradas a mano (ver [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md#autenticación-de-trivia)). Para avisar el fin de partida a Matchmaking necesita el secreto de su cliente de servicio, que se guarda con user-secrets:
+La API acepta el token de la sesión del Shell (ver [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md#autenticación-de-trivia)). Para avisar el fin de partida a Matchmaking:
 
 ```bash
-# Desde la raíz del repositorio
 dotnet user-secrets set "Matchmaking:ClientSecret" "<secreto del cliente de servicio de Trivia>" --project src/BattleHub.Trivia.Api
 ```
 
-Sin ese secreto la API arranca y se puede jugar, pero el fin de partida queda pendiente de avisar a Matchmaking hasta que se configure.
-
-Desde la raíz del repositorio (donde está `BattleHub.Trivia.slnx`):
+Preparar esquema y datos, luego arrancar la API (LocalDB por defecto si no hay cadena de conexión):
 
 ```bash
 dotnet restore
 dotnet build
+dotnet run --project src/BattleHub.Trivia.DbInit -- migrate
+dotnet run --project src/BattleHub.Trivia.DbInit -- seed
 dotnet run --project src/BattleHub.Trivia.Api
 ```
 
-`dotnet run` usa el perfil `http` de `launchSettings.json`, con el entorno *Development*. Con ese perfil la API aplica las migraciones y carga sola las 30 preguntas del banco inicial, sin scripts. Si la base LocalDB `BattleHubTrivia` no existe, la crea; si ya tiene preguntas, no las vuelve a cargar.
+La API queda en `http://localhost:5185` (`GET /health` → `Healthy`).
 
-La API queda en `http://localhost:5185`. Para verificar que está arriba: `GET http://localhost:5185/health` → `Healthy`.
-
-Pruebas (el CI ejecuta todas las pruebas de cada proyecto):
+Pruebas:
 
 ```bash
-dotnet test tests/BattleHub.Trivia.UnitTests          # pruebas unitarias
-dotnet test tests/BattleHub.Trivia.IntegrationTests   # pruebas de integración (SQL Server)
+dotnet test tests/BattleHub.Trivia.UnitTests
+dotnet test tests/BattleHub.Trivia.IntegrationTests
 ```
 
-Las pruebas de integración usan SQL Server en un contenedor (Testcontainers, requiere Docker). Sin Docker se puede usar LocalDB definiendo antes `TRIVIA_TEST_CONNECTION='Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true'`.
+Las pruebas de integración usan SQL Server en un contenedor (Testcontainers). Sin Docker: `TRIVIA_TEST_CONNECTION='Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true'`.
 
-#### Docker
-
-`src/BattleHub.Trivia.Api/Dockerfile` tiene dos etapas: compila y publica la API con el SDK de .NET 10 y copia solo el resultado a la imagen de ASP.NET para Alpine, que corre sin root y escucha en el puerto 8080. La imagen incluye las bibliotecas ICU, porque SqlClient no funciona sin ellas, y no lleva ningún secreto: la configuración se pasa al ejecutar el contenedor.
-
-Como la API usa los proyectos Data y Domain, la imagen se construye desde la raíz del repositorio. El `.dockerignore` de la raíz deja pasar solo esos tres proyectos:
+#### Imágenes individuales
 
 ```bash
 docker build --file src/BattleHub.Trivia.Api/Dockerfile --tag battlehub-trivia-api .
+docker build --file src/BattleHub.Trivia.DbInit/Dockerfile --tag battlehub-trivia-dbinit .
 docker run --rm -p 5185:8080 --env-file .env battlehub-trivia-api
 ```
 
-La API queda en `http://localhost:5185`, el mismo puerto que con `dotnet run`. El archivo `.env` se crea copiando `.env.example` (ver [Configuración y secretos](#configuración-y-secretos)):
-
-- `Matchmaking__ClientSecret` es necesaria para avisar el fin de partida a Matchmaking.
-- `ConnectionStrings__Trivia` debe apuntar a un SQL Server con usuario y contraseña de SQL, que acepte conexiones TCP. LocalDB no funciona dentro de un contenedor Linux. Para usar el SQL Server de la propia máquina, el servidor es `host.docker.internal`, por ejemplo `Server=host.docker.internal,1433;Database=BattleHubTrivia;User Id=<usuario>;Password=<contraseña>;TrustServerCertificate=true`. En Linux hay que agregar `--add-host=host.docker.internal:host-gateway` al `docker run`.
-- Para que el contenedor aplique las migraciones y cargue las 30 preguntas al arrancar, se agregan `Database__MigrateOnStartup=true` y `Database__SeedQuestions=true`. Dentro del contenedor no se usa `launchSettings.json` y el entorno es *Production*, así que por defecto están en `false`.
-
-El job `backend-docker` del CI construye la imagen en cada pull request y la levanta junto a un SQL Server temporal, con una contraseña que se genera en el momento y no se guarda. Comprueba que `GET /health` responda `Healthy` y que la base tenga 5 migraciones, 30 preguntas y 120 opciones. El tamaño de la imagen se muestra en el resumen del job `backend-docker`.
+El job `backend-docker` del CI construye API y DbInit, aplica `migrate` + `seed` (y repite `seed` para comprobar que no hay duplicados), levanta la API y verifica 5 migraciones, 30 preguntas y 120 opciones.
 
 ### Frontend (Aurelia)
 
@@ -221,8 +253,8 @@ Ningún valor sensible (contraseñas, tokens, API keys) se escribe en archivos d
 | `Auth:Issuer`, `Auth:Audience`                                              | `Auth__Issuer`, `Auth__Audience`                                     | No                                  | `appsettings.json`: emisor y audiencia del token de sesión del Shell, acordados con Shell                                                                                                                     |
 | `Matchmaking:TokenEndpoint`, `Matchmaking:Audience`, `Matchmaking:ClientId` | `Matchmaking__TokenEndpoint`, etc.                                   | No: identificadores públicos        | `appsettings.json`: cliente de servicio de Trivia para avisar el fin de partida                                                                                                                               |
 | `Matchmaking:BaseUrl`, `Profile:BaseUrl`, `Cors:Origins`                    | `Matchmaking__BaseUrl`, `Profile__BaseUrl`, `Cors__Origins__0`, etc. | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                                                                                                                   |
-| `Database:MigrateOnStartup`, `Database:SeedQuestions`                       | `Database__MigrateOnStartup`, `Database__SeedQuestions`              | No                                  | `false` en `appsettings.json` y `true` en el perfil de desarrollo (`launchSettings.json`). Fuera de _Development_, o con `dotnet run --no-launch-profile`, se activan por configuración o variable de entorno |
-| `TRIVIA_API_URL` (frontend)                                                 | `TRIVIA_API_URL`                                                     | No                                  | Variable de entorno antes de `npm start` o `npm run build`                                                                                                                                                    |
+| `MSSQL_SA_PASSWORD`                                                         | `MSSQL_SA_PASSWORD`                                                  | **Sí**                              | Solo en `.env` para Docker Compose                                                                                                                                                                            |
+| `TRIVIA_API_URL` (frontend)                                                 | `TRIVIA_API_URL`                                                     | No                                  | Build-arg del frontend / variable antes de `npm start` o `npm run build`. En Compose: URL del navegador hacia la API                                                                                          |
 
 **En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno _Development_:
 

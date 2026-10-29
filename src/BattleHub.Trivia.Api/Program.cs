@@ -1,13 +1,10 @@
 
 using BattleHub.Trivia.Data;
-using BattleHub.Trivia.Data.Context;
-using BattleHub.Trivia.Data.Seed;
 using BattleHub.Trivia.Domain.Services;
 using BattleHub.Trivia.Api.Auth;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Api.Profiles;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,22 +78,9 @@ builder.Services.AddHostedService<FinishWorker>();
 
 var app = builder.Build();
 
-if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
-{
-    using var scope = app.Services.CreateScope();
-
-    var db = scope.ServiceProvider
-        .GetRequiredService<TriviaDbContext>();
-
-    await db.Database.MigrateAsync();
-
-    if (app.Configuration.GetValue<bool>("Database:SeedQuestions"))
-    {
-        await scope.ServiceProvider
-            .GetRequiredService<QuestionSeeder>()
-            .SeedAsync();
-    }
-}
+// Las migraciones y la generación de datos iniciales NO se ejecutan aquí.
+// En Docker Compose lo hacen los servicios one-shot db-migrate y db-seed
+// (proyecto BattleHub.Trivia.DbInit). En local: ver README, sección Docker Compose.
 
 if (app.Environment.IsDevelopment())
 {

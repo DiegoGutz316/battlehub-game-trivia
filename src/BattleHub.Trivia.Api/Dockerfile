@@ -21,11 +21,14 @@ RUN rm -rf /app/publish/runtimes/win* /app/publish/runtimes/osx* /app/publish/ru
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine
 # SqlClient no funciona en modo invariante ("Globalization Invariant Mode is not supported"):
 # se instalan las bibliotecas ICU de Alpine y se desactiva ese modo.
-RUN apk add --no-cache icu-data-full icu-libs
+# curl se usa en el healthcheck de docker-compose.
+RUN apk add --no-cache icu-data-full icu-libs curl
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 WORKDIR /app
 COPY --from=build /app/publish .
 # Usuario sin privilegios que ya trae la imagen oficial.
 USER $APP_UID
 EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=12 \
+  CMD curl --fail --silent http://localhost:8080/health | grep -q Healthy || exit 1
 ENTRYPOINT ["dotnet", "BattleHub.Trivia.Api.dll"]
