@@ -162,13 +162,13 @@ Se ejecutan desde la raíz del repositorio. La herramienta `dotnet-ef` está fij
 dotnet tool restore
 ```
 
-**Aplicar las migraciones** a la base configurada en `TriviaDbContextFactory`. Por defecto es LocalDB, con `Database=BattleHubTrivia`:
+**Aplicar las migraciones** a la base de `ConnectionStrings__Trivia`, que debe estar definida:
 
 ```powershell
 dotnet ef database update --project src/BattleHub.Trivia.Data
 ```
 
-Para aplicarlas a otra base, por ejemplo una de prueba:
+Para aplicarlas a otra base sin cambiar la variable, por ejemplo una de prueba:
 
 ```powershell
 dotnet ef database update --project src/BattleHub.Trivia.Data --connection "Server=(localdb)\mssqllocaldb;Database=BattleHubTrivia_prueba;Trusted_Connection=True;TrustServerCertificate=True"

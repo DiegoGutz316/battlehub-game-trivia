@@ -12,15 +12,12 @@ public static class DependencyInjection
 {
     public const string ConnectionStringName = "Trivia";
 
-    public const string LocalFallbackConnectionString =
-        "Server=(localdb)\\mssqllocaldb;Database=BattleHubTrivia;Trusted_Connection=True;TrustServerCertificate=True";
-
     public static IServiceCollection AddTriviaData(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString(ConnectionStringName);
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            connectionString = LocalFallbackConnectionString;
+            throw new InvalidOperationException("Configurar ConnectionStrings__Trivia.");
         }
 
         services.AddDbContext<TriviaDbContext>(options =>

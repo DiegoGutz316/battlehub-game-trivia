@@ -105,6 +105,8 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("ConnectionStrings:Trivia", connectionString);
+        builder.UseSetting("Cors:Origins:0", "http://localhost:4000");
 
         builder.ConfigureTestServices(services =>
         {

@@ -18,13 +18,16 @@ builder.Services.AddSignalR(options =>
     options.MaximumReceiveMessageSize = 32768;
 });
 
+var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>();
+
+if (corsOrigins is not { Length: > 0 })
+{
+    throw new InvalidOperationException("Configurar Cors__Origins__0.");
+}
+
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy => policy
-        .WithOrigins(
-            builder.Configuration
-                .GetSection("Cors:Origins")
-                .Get<string[]>()
-            ?? ["http://localhost:4000", "http://localhost:4002"])
+        .WithOrigins(corsOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials()));

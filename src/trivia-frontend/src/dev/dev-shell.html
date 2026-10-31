@@ -1,18 +1,13 @@
 <div class="trivia-dev">
-  <h2>Modo playground (sin Shell)</h2>
-  <p>
-    Contexto simulado: partida <strong>${context.matchId}</strong> ·
-    jugador <strong>${context.currentUser.displayName}</strong> (${context.currentUser.id})
-  </p>
-  <p>
-    Sin el Shell se juega en modo playground (un solo jugador). Para cambiar el nombre del jugador:
-    <code>?displayName=Jugador%202</code>
-  </p>
-  <p>
-    <button click.trigger="start()">start()</button>
-    <button click.trigger="pause()">pause()</button>
-    <button click.trigger="dispose()">dispose()</button>
-  </p>
+  <header class="trivia-dev-bar">
+    <h2>Modo playground (sin Shell)</h2>
+    <p>Jugador <strong>${context.currentUser.displayName}</strong> · otro nombre: <code>?displayName=Jugador%202</code></p>
+    <p>
+      <button click.trigger="start()">start()</button>
+      <button click.trigger="pause()">pause()</button>
+      <button click.trigger="dispose()">dispose()</button>
+    </p>
+  </header>
   <p class="trivia-dev-error" if.bind="error" data-testid="dev-error">LIFECYCLE_ERROR: ${error}</p>
 
   <!-- Área del juego con los tamaños mínimo y máximo del contrato visual (03-contratos-tecnicos.md §7). -->

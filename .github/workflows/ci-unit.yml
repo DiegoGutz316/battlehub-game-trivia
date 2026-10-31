@@ -108,6 +108,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          TRIVIA_API_URL: http://localhost:5185
 
       - name: Unit tests
         run: npx jest --ci --coverage=false
