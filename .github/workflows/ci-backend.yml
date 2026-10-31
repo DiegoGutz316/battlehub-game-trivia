@@ -1,56 +1,58 @@
 # R-24 / R-08 / R-07: CI completo del backend (.NET).
 # Compila con advertencias como errores, linter (dotnet format), unitarias,
 # integración, cobertura y smoke Docker. No publica imágenes.
+# Corre siempre y omite sus jobs si el backend no cambió: así el check obligatorio
+# `backend` siempre reporta y un PR de otra parte no se queda esperando.
 name: CI Backend
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "src/BattleHub.Trivia.Api/**"
-      - "src/BattleHub.Trivia.Data/**"
-      - "src/BattleHub.Trivia.DbInit/**"
-      - "src/BattleHub.Trivia.Domain/**"
-      - "tests/BattleHub.Trivia.UnitTests/**"
-      - "tests/BattleHub.Trivia.IntegrationTests/**"
-      - "BattleHub.Trivia.slnx"
-      - "Directory.Build.props"
-      - ".editorconfig"
-      - "dotnet-tools.json"
-      - "docker-compose.yml"
-      - ".dockerignore"
-      - ".env.example"
-      - ".github/workflows/ci-backend.yml"
-      - ".github/scripts/**"
   push:
     branches: [main]
-    paths:
-      - "src/BattleHub.Trivia.Api/**"
-      - "src/BattleHub.Trivia.Data/**"
-      - "src/BattleHub.Trivia.DbInit/**"
-      - "src/BattleHub.Trivia.Domain/**"
-      - "tests/BattleHub.Trivia.UnitTests/**"
-      - "tests/BattleHub.Trivia.IntegrationTests/**"
-      - "BattleHub.Trivia.slnx"
-      - "Directory.Build.props"
-      - ".editorconfig"
-      - "dotnet-tools.json"
-      - "docker-compose.yml"
-      - ".dockerignore"
-      - ".env.example"
-      - ".github/workflows/ci-backend.yml"
-      - ".github/scripts/**"
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   COVERAGE_THRESHOLD: "85"
   ENFORCE_COVERAGE: "true"
 
 jobs:
+  changes:
+    name: backend-changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'src/BattleHub.Trivia.Api/**'
+              - 'src/BattleHub.Trivia.Data/**'
+              - 'src/BattleHub.Trivia.DbInit/**'
+              - 'src/BattleHub.Trivia.Domain/**'
+              - 'tests/BattleHub.Trivia.UnitTests/**'
+              - 'tests/BattleHub.Trivia.IntegrationTests/**'
+              - 'BattleHub.Trivia.slnx'
+              - 'Directory.Build.props'
+              - '.editorconfig'
+              - 'dotnet-tools.json'
+              - 'docker-compose.yml'
+              - '.dockerignore'
+              - '.env.example'
+              - '.github/workflows/ci-backend.yml'
+              - '.github/scripts/**'
+
   backend:
     name: backend
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.backend == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -93,6 +95,8 @@ jobs:
 
   backend-docker:
     name: backend-docker
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.backend == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -183,7 +187,9 @@ jobs:
     steps:
       - name: Evaluate backend checks
         run: |
-          if [ "${{ needs.backend.result }}" != "success" ] || [ "${{ needs.backend-docker.result }}" != "success" ]; then
-            echo "Uno o más jobs del backend fallaron"
-            exit 1
-          fi
+          for result in "${{ needs.backend.result }}" "${{ needs.backend-docker.result }}"; do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "Uno o más jobs del backend fallaron"
+              exit 1
+            fi
+          done
