@@ -11,7 +11,7 @@ import type { GamePhase, Player, Question, QuestionClosedEvent, GameFinishedEven
 export type GameState = 'created' | 'initialized' | 'running' | 'paused' | 'disposed';
 interface HistoryItem { matchId: string; players: { userId: string; score: number; position: number }[] }
 interface Statistics { matchesPlayed: number; wins: number; averageScore: number; bestScore: number }
-const apiUrl = (process.env.TRIVIA_API_URL || 'http://localhost:5185').replace(/\/$/, '');
+const apiUrl = process.env.TRIVIA_API_URL!.replace(/\/$/, '');
 
 @customElement({ name: 'trivia-game-module', template })
 export class GameModule implements IGameModule {

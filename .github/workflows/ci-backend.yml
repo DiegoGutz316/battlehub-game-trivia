@@ -158,6 +158,7 @@ jobs:
 
           docker run --detach --name trivia-api --network trivia-net --publish 5185:8080 \
             --env ConnectionStrings__Trivia="$conn" \
+            --env Cors__Origins__0=http://localhost:4000 \
             battlehub-trivia-api:ci
 
           for attempt in $(seq 1 60); do

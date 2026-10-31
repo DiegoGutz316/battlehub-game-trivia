@@ -8,6 +8,7 @@ const REMOTE_NAME = 'triviaGame';
 const PORT = 4002;
 // ============================================================
 
+const fs = require('fs');
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
@@ -15,8 +16,14 @@ const { ModuleFederationPlugin } = require('webpack').container;
 const sharedDeps = require('./mf-shared');
 const { DefinePlugin } = require('webpack');
 
+// En desarrollo se usa el mismo .env de la raíz que Docker Compose. Una variable ya definida tiene prioridad.
+const rootEnv = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(rootEnv)) process.loadEnvFile(rootEnv);
+
 module.exports = function (env) {
   const production = env.production || process.env.NODE_ENV === 'production';
+  // Webpack la escribe dentro del bundle: sin ella el juego no sabría a qué API conectarse.
+  if (!process.env.TRIVIA_API_URL) throw new Error('Configurar TRIVIA_API_URL (ver .env.example).');
   return {
     target: 'web',
     mode: production ? 'production' : 'development',
@@ -51,7 +58,7 @@ module.exports = function (env) {
       ],
     },
     plugins: [
-      new DefinePlugin({ 'process.env.TRIVIA_API_URL': JSON.stringify(process.env.TRIVIA_API_URL || 'http://localhost:5185') }),
+      new DefinePlugin({ 'process.env.TRIVIA_API_URL': JSON.stringify(process.env.TRIVIA_API_URL) }),
       new ModuleFederationPlugin({
         name: REMOTE_NAME,
         filename: 'remoteEntry.js',                          // ADR-003 §2

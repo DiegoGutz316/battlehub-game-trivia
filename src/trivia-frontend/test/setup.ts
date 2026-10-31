@@ -1,3 +1,6 @@
+// En producción lo escribe webpack dentro del bundle; las pruebas no pasan por webpack.
+process.env.TRIVIA_API_URL = 'http://localhost:5185';
+
 import { BrowserPlatform } from '@aurelia/platform-browser';
 import { setPlatform, onFixtureCreated, type IFixture } from '@aurelia/testing';
 
