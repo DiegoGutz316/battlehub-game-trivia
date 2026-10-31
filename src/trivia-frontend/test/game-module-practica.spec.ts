@@ -1,4 +1,4 @@
-// Modo práctica: el juego abierto sin el Shell ofrece una partida de un solo jugador con las mismas pantallas.
+// Modo playground: el juego abierto sin el Shell ofrece una partida de un solo jugador con las mismas pantallas.
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
 import { GameModule } from '../src/game-module';
@@ -37,8 +37,8 @@ function mockCreateClient(): MockClient {
 jest.mock('../src/services/trivia-hub/practice-trivia-client', () => ({ PracticeTriviaClient: jest.fn(() => mockCreateClient()) }));
 jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn() }));
 
-const withoutShell: GameContext = { matchId: 'match-dev-001', gameType: 'trivia', currentUser: { id: 'user-dev-1', displayName: 'Jugador 1' } };
-const fromShell: GameContext = { ...withoutShell, getAccessToken: jest.fn(async () => 'token'), getMatchmakingAccessToken: jest.fn(async () => 'token') };
+const withoutShell: GameContext = { matchId: 'match-dev-001', gameType: 'trivia', currentUser: { id: 'user-dev-1', displayName: 'Jugador 1' }, mode: 'playground' };
+const fromShell: GameContext = { ...withoutShell, mode: undefined, getAccessToken: jest.fn(async () => 'token'), getMatchmakingAccessToken: jest.fn(async () => 'token') };
 const now = (): string => new Date().toISOString();
 const question: Question = {
   questionId: 'q1', questionNumber: 1, totalQuestions: 10, text: '¿Qué lenguaje usa Aurelia?', category: 'Tecnología',
@@ -73,24 +73,24 @@ async function render(context: GameContext = withoutShell) {
 
 beforeEach(() => { jest.clearAllMocks(); mockClients.length = 0; });
 
-describe('modo práctica (sin el Shell)', () => {
+describe('modo playground (sin el Shell)', () => {
   it('reemplaza la vista previa por el botón de práctica y juega con las mismas pantallas hasta el resultado', async () => {
     const { game, text, button, fixture } = await render();
     try {
-      expect(await text()).toContain('Modo práctica');
-      expect((await button('Jugar en modo práctica'))?.disabled).toBe(false);
+      expect(await text()).toContain('Modo playground');
+      expect((await button('Jugar en modo playground'))?.disabled).toBe(false);
 
-      (await button('Jugar en modo práctica'))!.click();
+      (await button('Jugar en modo playground'))!.click();
       await tasksSettled();
       await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(PracticeTriviaClient).toHaveBeenCalledWith('http://localhost:5185', withoutShell.currentUser);
       expect(SignalRTriviaClient).not.toHaveBeenCalled();
       expect(latest().joinMatch).toHaveBeenCalledWith({ matchId: 'match-dev-001' });
-      expect(game.practice).toBe(true);
+      expect(game.solo).toBe(true);
       expect(game.state).toBe('running');
-      expect(fixture.appHost.querySelector('[data-testid="practice-badge"]')?.textContent).toContain('no se guarda en tu historial');
-      expect(fixture.appHost.querySelector('[data-testid="practice-offer"]')).toBeNull();
+      expect(fixture.appHost.querySelector('[data-testid="solo-badge"]')?.textContent).toContain('no se guarda en tu historial');
+      expect(fixture.appHost.querySelector('[data-testid="solo-offer"]')).toBeNull();
 
       emit('CurrentState', {
         matchId: 'practice-1', phase: 'playing', serverTimeUtc: now(), totalQuestions: 10, lastQuestionResult: null,
@@ -112,7 +112,7 @@ describe('modo práctica (sin el Shell)', () => {
 
       emit('GameFinished', finished(1800, 8));
       const content = await text();
-      expect(content).toContain('Práctica terminada');
+      expect(content).toContain('Partida terminada');
       expect(content).toContain('1800 puntos · 8 de 10 respuestas correctas');
       expect(content).not.toContain('¡Ganaste!');
       expect(content).not.toContain('Ver mi historial');
@@ -120,40 +120,40 @@ describe('modo práctica (sin el Shell)', () => {
     } finally { await game.dispose(); await fixture.stop(true); }
   });
 
-  it('"Jugar otra vez" cierra la práctica anterior y empieza una nueva desde cero', async () => {
+  it('"Jugar otra vez" cierra la partida anterior y empieza una nueva desde cero', async () => {
     const { game, text, fixture } = await render();
     try {
-      await game.startPractice();
+      await game.playSolo();
       const first = latest();
       emit('GameFinished', finished(900, 4));
 
-      await game.startPractice();
+      await game.playSolo();
 
       expect(first.disconnect).toHaveBeenCalledTimes(1);
       expect(mockClients).toHaveLength(2);
       expect(latest().joinMatch).toHaveBeenCalledTimes(1);
       expect(game.result).toBeNull();
       expect(game.phase).toBe('waiting');
-      expect(await text()).toContain('Preparando la práctica');
+      expect(await text()).toContain('Preparando la partida');
       emit('GameFinished', finished(100, 1), first);
       expect(game.result).toBeNull();
     } finally { await game.dispose(); await fixture.stop(true); }
   });
 
-  it('si la API no responde, muestra el error y vuelve a ofrecer la práctica', async () => {
-    failNextClient(client => client.connect.mockRejectedValueOnce(new Error('No se pudo conectar con el modo práctica. Revisa que la API de Trivia esté encendida.')));
+  it('si la API no responde, muestra el error y vuelve a ofrecer jugar', async () => {
+    failNextClient(client => client.connect.mockRejectedValueOnce(new Error('No se pudo conectar con Trivia. Revisa que la API esté encendida.')));
     const { game, text, button, fixture } = await render();
     try {
-      await game.startPractice();
+      await game.playSolo();
 
       const content = await text();
-      expect(game.practice).toBe(false);
-      expect(content).toContain('No se pudo conectar con el modo práctica');
+      expect(game.solo).toBe(false);
+      expect(content).toContain('No se pudo conectar con Trivia');
       expect(latest().disconnect).toHaveBeenCalled();
-      expect((await button('Jugar en modo práctica'))?.disabled).toBe(false);
+      expect((await button('Jugar en modo playground'))?.disabled).toBe(false);
 
-      await game.startPractice();
-      expect(game.practice).toBe(true);
+      await game.playSolo();
+      expect(game.solo).toBe(true);
       expect(game.error).toBe('');
     } finally { await game.dispose(); await fixture.stop(true); }
   });
@@ -163,16 +163,16 @@ describe('modo práctica (sin el Shell)', () => {
     const game = new GameModule();
     await game.initialize(withoutShell);
 
-    await game.startPractice();
+    await game.playSolo();
 
-    expect(game.error).toBe('No se pudo iniciar la práctica.');
+    expect(game.error).toBe('No se pudo iniciar la partida.');
     await game.dispose();
   });
 
-  it('al reconectar recupera la práctica sin pedir tokens al Shell', async () => {
+  it('al reconectar recupera la partida sin pedir tokens al Shell', async () => {
     const game = new GameModule();
     await game.initialize(withoutShell);
-    await game.startPractice();
+    await game.playSolo();
 
     latest().setState('reconnecting');
     latest().setState('connected');
@@ -184,19 +184,19 @@ describe('modo práctica (sin el Shell)', () => {
     latest().joinMatch.mockRejectedValueOnce(new Error('PRACTICE_NOT_FOUND'));
     latest().setState('connected');
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(game.error).toContain('No se pudo recuperar la práctica');
+    expect(game.error).toContain('No se pudo recuperar la partida');
     await game.dispose();
     expect(mockClients[0].disconnect).toHaveBeenCalled();
   });
 
-  it('pausado indica que la práctica sigue en el servidor y no deja empezar otra', async () => {
+  it('pausado indica que la partida sigue en el servidor y no deja empezar otra', async () => {
     const { game, text, fixture } = await render();
     try {
-      await game.startPractice();
+      await game.playSolo();
       await game.pause();
 
-      expect(await text()).toContain('La práctica continúa en el servidor.');
-      await game.startPractice();
+      expect(await text()).toContain('La partida continúa en el servidor.');
+      await game.playSolo();
       expect(mockClients).toHaveLength(1);
     } finally { await game.dispose(); await fixture.stop(true); }
   });
@@ -204,20 +204,20 @@ describe('modo práctica (sin el Shell)', () => {
   it('no se ofrece cuando el juego se abre desde el Shell', async () => {
     const { game, text, fixture } = await render(fromShell);
     try {
-      await game.startPractice();
+      await game.playSolo();
 
       expect(PracticeTriviaClient).not.toHaveBeenCalled();
-      expect(await text()).not.toContain('Jugar en modo práctica');
-      expect(game.practice).toBe(false);
+      expect(await text()).not.toContain('Jugar en modo');
+      expect(game.solo).toBe(false);
     } finally { await game.dispose(); await fixture.stop(true); }
   });
 
-  it('después de dispose() no empieza ninguna práctica', async () => {
+  it('después de dispose() no empieza ninguna partida', async () => {
     const game = new GameModule();
     await game.initialize(withoutShell);
     await game.dispose();
 
-    await game.startPractice();
+    await game.playSolo();
 
     expect(PracticeTriviaClient).not.toHaveBeenCalled();
   });
