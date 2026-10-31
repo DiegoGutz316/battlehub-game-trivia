@@ -1,4 +1,4 @@
-// Cliente de las partidas de un solo jugador (hub /hubs/trivia/practice).
+// Cliente de las partidas de un solo jugador (hub /hubs/trivia/practice): modos práctica y playground.
 // Traduce ese protocolo a los mismos eventos del hub de partidas, para que GameModule
 // reutilice sus pantallas: pregunta, opciones, temporizador, revisión y resultado.
 import { HubConnectionBuilder, LogLevel, type HubConnection } from '@microsoft/signalr';
@@ -69,7 +69,7 @@ export class PracticeTriviaClient implements TriviaHubClient {
   public async joinMatch(): Promise<void> {
     if (!this.session) {
       let started: PracticeStarted;
-      try { started = await this.connection.invoke<PracticeStarted>('StartPractice', this.player.displayName); }
+      try { started = await this.connection.invoke<PracticeStarted>('StartPractice', this.player.displayName.slice(0, 50)); }
       catch { throw new Error('No se pudo iniciar la partida. Reintenta en unos segundos.'); }
       this.session = { matchId: started.matchId, secret: started.secret };
       this.lastQuestion = started.firstQuestion;

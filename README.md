@@ -186,7 +186,7 @@ http://localhost:4002/
 http://localhost:4002/?displayName=Jugador%202   (otro nombre para el jugador)
 ```
 
-Cuando el juego se abre desde el Shell, el modo playground no aparece y todo funciona como una partida normal.
+El modo práctica es distinto: lo abre el Shell, sin sala, para un usuario con acceso al juego. Ver [Modo práctica](docs/integracion-shell-matchmaking.md#modo-práctica).
 
 #### Integración con el Shell (Module Federation, ADR-003)
 

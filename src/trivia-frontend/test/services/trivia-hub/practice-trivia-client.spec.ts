@@ -91,6 +91,15 @@ describe('PracticeTriviaClient', () => {
     } }]);
   });
 
+  it('recorta el nombre al máximo que acepta el hub', async () => {
+    const client = new PracticeTriviaClient('http://api', { id: 'one', displayName: 'n'.repeat(80) });
+    mockConnection.invoke.mockResolvedValueOnce(started);
+
+    await client.joinMatch();
+
+    expect(mockConnection.invoke).toHaveBeenCalledWith('StartPractice', 'n'.repeat(50));
+  });
+
   it('si el servidor no puede empezar la partida, lanza un error legible', async () => {
     const client = new PracticeTriviaClient('http://api', player);
     mockConnection.invoke.mockRejectedValueOnce(new Error('HubException: INSUFFICIENT_QUESTIONS'));
