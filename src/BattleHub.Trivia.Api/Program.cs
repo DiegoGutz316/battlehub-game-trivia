@@ -1,7 +1,7 @@
 
+using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Data;
 using BattleHub.Trivia.Domain.Services;
-using BattleHub.Trivia.Api.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 

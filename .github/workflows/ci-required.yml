@@ -1,0 +1,57 @@
+# Puente para protección de rama cuando CI Backend / Frontend / Unit
+# no se disparan por filtros `paths` (evita checks "Expected — Waiting").
+# Marcar como required: "CI Required / ready" y "CI Secrets / secrets".
+name: CI Required
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ready:
+    name: ready
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'src/BattleHub.Trivia.Api/**'
+              - 'src/BattleHub.Trivia.Data/**'
+              - 'src/BattleHub.Trivia.DbInit/**'
+              - 'src/BattleHub.Trivia.Domain/**'
+              - 'tests/BattleHub.Trivia.UnitTests/**'
+              - 'tests/BattleHub.Trivia.IntegrationTests/**'
+              - 'BattleHub.Trivia.slnx'
+              - 'Directory.Build.props'
+              - '.editorconfig'
+              - 'dotnet-tools.json'
+              - 'docker-compose.yml'
+              - '.dockerignore'
+              - '.env.example'
+              - '.github/workflows/ci-backend.yml'
+              - '.github/workflows/ci-unit.yml'
+              - '.github/scripts/**'
+            frontend:
+              - 'src/trivia-frontend/**'
+              - '.github/workflows/ci-frontend.yml'
+              - '.github/workflows/ci-unit.yml'
+              - '.github/scripts/**'
+
+      - name: Resumen de CI esperado
+        run: |
+          echo "## CI selectivo (paths)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backend relevante: \`${{ steps.filter.outputs.backend }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend relevante: \`${{ steps.filter.outputs.frontend }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Si backend=true debe pasar **CI Backend** y **CI Unit** (jobs backend)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Si frontend=true debe pasar **CI Frontend** y **CI Unit** (jobs frontend)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Checks always-on recomendados en branch protection: **CI Required / ready** y **CI Secrets / secrets**." >> "$GITHUB_STEP_SUMMARY"

@@ -57,171 +57,171 @@ public sealed class TriviaGameService
     public Question StartNextQuestion(
     GameMatch match,
     DateTimeOffset startedAt)
-{
-    if (match.IsFinished)
     {
-        throw new InvalidOperationException(
-            "La partida ya terminó.");
+        if (match.IsFinished)
+        {
+            throw new InvalidOperationException(
+                "La partida ya terminó.");
+        }
+
+        var nextIndex = match.CurrentQuestionIndex + 1;
+
+        if (nextIndex >= match.Questions.Count)
+        {
+            throw new InvalidOperationException(
+                "No quedan preguntas disponibles.");
+        }
+
+        match.CurrentQuestionIndex = nextIndex;
+        match.QuestionStartedAt = startedAt;
+        match.CurrentAnswers.Clear();
+
+        return match.CurrentQuestion!;
     }
-
-    var nextIndex = match.CurrentQuestionIndex + 1;
-
-    if (nextIndex >= match.Questions.Count)
-    {
-        throw new InvalidOperationException(
-            "No quedan preguntas disponibles.");
-    }
-
-    match.CurrentQuestionIndex = nextIndex;
-    match.QuestionStartedAt = startedAt;
-    match.CurrentAnswers.Clear();
-
-    return match.CurrentQuestion!;
-}
 
     public int SubmitAnswer(
     GameMatch match,
     string userId,
     string answerId,
     DateTimeOffset answeredAt)
-{
-    var player = match.Players
-        .FirstOrDefault(player => player.UserId == userId);
-
-    if (player is null)
     {
-        throw new InvalidOperationException(
-            "El jugador no pertenece a la partida.");
+        var player = match.Players
+            .FirstOrDefault(player => player.UserId == userId);
+
+        if (player is null)
+        {
+            throw new InvalidOperationException(
+                "El jugador no pertenece a la partida.");
+        }
+
+        var question = match.CurrentQuestion;
+
+        if (question is null || match.QuestionStartedAt is null)
+        {
+            throw new InvalidOperationException(
+                "No hay una pregunta activa.");
+        }
+
+        if (match.CurrentAnswers.Any(answer =>
+            answer.UserId == userId &&
+            answer.QuestionId == question.QuestionId))
+        {
+            throw new InvalidOperationException(
+                "El jugador ya respondió esta pregunta.");
+        }
+
+        if (!question.Options.Any(option =>
+            option.AnswerId == answerId))
+        {
+            throw new ArgumentException(
+                "La respuesta seleccionada no es válida.",
+                nameof(answerId));
+        }
+
+        var elapsed = answeredAt - match.QuestionStartedAt.Value;
+
+        if (elapsed < TimeSpan.Zero ||
+            elapsed >= TimeSpan.FromSeconds(
+                TriviaScoringService.QuestionTimeSeconds))
+        {
+            throw new InvalidOperationException(
+                "El tiempo para responder terminó.");
+        }
+
+        var isCorrect = question.CorrectAnswerId == answerId;
+
+        var points = _scoringService.CalculatePoints(
+            isCorrect,
+            elapsed);
+
+        match.CurrentAnswers.Add(new PlayerAnswer
+        {
+            UserId = userId,
+            QuestionId = question.QuestionId,
+            AnswerId = answerId,
+            AnsweredAt = answeredAt,
+            IsCorrect = isCorrect,
+            PointsAwarded = points
+        });
+
+        player.Score += points;
+
+        if (isCorrect)
+        {
+            player.CorrectAnswers++;
+            player.CorrectAnswersTimeMs +=
+                (long)elapsed.TotalMilliseconds;
+        }
+
+        return points;
     }
 
-    var question = match.CurrentQuestion;
-
-    if (question is null || match.QuestionStartedAt is null)
+    public bool CloseCurrentQuestion(
+        GameMatch match,
+        DateTimeOffset closedAt)
     {
-        throw new InvalidOperationException(
-            "No hay una pregunta activa.");
+        if (match.IsFinished)
+        {
+            throw new InvalidOperationException(
+                "La partida ya terminó.");
+        }
+
+        if (match.CurrentQuestion is null ||
+            match.QuestionStartedAt is null)
+        {
+            throw new InvalidOperationException(
+                "No hay una pregunta activa.");
+        }
+
+        match.QuestionStartedAt = null;
+
+        var isLastQuestion =
+            match.CurrentQuestionIndex >= match.Questions.Count - 1;
+
+        if (isLastQuestion)
+        {
+            match.IsFinished = true;
+            match.FinishedAt = closedAt;
+            return true;
+        }
+
+        return false;
     }
 
-    if (match.CurrentAnswers.Any(answer =>
-        answer.UserId == userId &&
-        answer.QuestionId == question.QuestionId))
+    public GamePlayer? GetWinner(GameMatch match)
     {
-        throw new InvalidOperationException(
-            "El jugador ya respondió esta pregunta.");
+        if (!match.IsFinished)
+        {
+            throw new InvalidOperationException(
+                "La partida todavía no ha terminado.");
+        }
+
+        if (match.Players.Count == 0)
+        {
+            return null;
+        }
+
+        var highestScore = match.Players.Max(player => player.Score);
+
+        var playersWithHighestScore = match.Players
+            .Where(player => player.Score == highestScore)
+            .ToList();
+
+        if (playersWithHighestScore.Count == 1)
+        {
+            return playersWithHighestScore[0];
+        }
+
+        var fastestTime = playersWithHighestScore
+            .Min(player => player.CorrectAnswersTimeMs);
+
+        var fastestPlayers = playersWithHighestScore
+            .Where(player =>
+                player.CorrectAnswersTimeMs == fastestTime)
+            .ToList();
+
+        return fastestPlayers.Count == 1
+            ? fastestPlayers[0]
+            : null;
     }
-
-    if (!question.Options.Any(option =>
-        option.AnswerId == answerId))
-    {
-        throw new ArgumentException(
-            "La respuesta seleccionada no es válida.",
-            nameof(answerId));
-    }
-
-    var elapsed = answeredAt - match.QuestionStartedAt.Value;
-
-    if (elapsed < TimeSpan.Zero ||
-        elapsed >= TimeSpan.FromSeconds(
-            TriviaScoringService.QuestionTimeSeconds))
-    {
-        throw new InvalidOperationException(
-            "El tiempo para responder terminó.");
-    }
-
-    var isCorrect = question.CorrectAnswerId == answerId;
-
-    var points = _scoringService.CalculatePoints(
-        isCorrect,
-        elapsed);
-
-    match.CurrentAnswers.Add(new PlayerAnswer
-    {
-        UserId = userId,
-        QuestionId = question.QuestionId,
-        AnswerId = answerId,
-        AnsweredAt = answeredAt,
-        IsCorrect = isCorrect,
-        PointsAwarded = points
-    });
-
-    player.Score += points;
-
-    if (isCorrect)
-    {
-        player.CorrectAnswers++;
-        player.CorrectAnswersTimeMs +=
-            (long)elapsed.TotalMilliseconds;
-    }
-
-    return points;
-}
-
-public bool CloseCurrentQuestion(
-    GameMatch match,
-    DateTimeOffset closedAt)
-{
-    if (match.IsFinished)
-    {
-        throw new InvalidOperationException(
-            "La partida ya terminó.");
-    }
-
-    if (match.CurrentQuestion is null ||
-        match.QuestionStartedAt is null)
-    {
-        throw new InvalidOperationException(
-            "No hay una pregunta activa.");
-    }
-
-    match.QuestionStartedAt = null;
-
-    var isLastQuestion =
-        match.CurrentQuestionIndex >= match.Questions.Count - 1;
-
-    if (isLastQuestion)
-    {
-        match.IsFinished = true;
-        match.FinishedAt = closedAt;
-        return true;
-    }
-
-    return false;
-}
-
-public GamePlayer? GetWinner(GameMatch match)
-{
-    if (!match.IsFinished)
-    {
-        throw new InvalidOperationException(
-            "La partida todavía no ha terminado.");
-    }
-
-    if (match.Players.Count == 0)
-    {
-        return null;
-    }
-
-    var highestScore = match.Players.Max(player => player.Score);
-
-    var playersWithHighestScore = match.Players
-        .Where(player => player.Score == highestScore)
-        .ToList();
-
-    if (playersWithHighestScore.Count == 1)
-    {
-        return playersWithHighestScore[0];
-    }
-
-    var fastestTime = playersWithHighestScore
-        .Min(player => player.CorrectAnswersTimeMs);
-
-    var fastestPlayers = playersWithHighestScore
-        .Where(player =>
-            player.CorrectAnswersTimeMs == fastestTime)
-        .ToList();
-
-    return fastestPlayers.Count == 1
-        ? fastestPlayers[0]
-        : null;
-}
 }

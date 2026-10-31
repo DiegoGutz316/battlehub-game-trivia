@@ -1,0 +1,100 @@
+# R-24 / R-42: CI completo del frontend (Node.js 22).
+# Lint, build, pruebas unitarias, cobertura y smoke Docker. No publica imágenes.
+name: CI Frontend
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/trivia-frontend/**"
+      - ".github/workflows/ci-frontend.yml"
+      - ".github/scripts/**"
+  push:
+    branches: [main]
+    paths:
+      - "src/trivia-frontend/**"
+      - ".github/workflows/ci-frontend.yml"
+      - ".github/scripts/**"
+
+permissions:
+  contents: read
+
+env:
+  COVERAGE_THRESHOLD: "85"
+  ENFORCE_COVERAGE: "true"
+
+jobs:
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/trivia-frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/trivia-frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: src/trivia-frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npx jest --ci
+
+      - name: Upload coverage summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-frontend
+          path: src/trivia-frontend/coverage/coverage-summary.json
+
+      - name: Coverage threshold
+        run: node ../../.github/scripts/coverage.mjs check frontend coverage/coverage-summary.json
+
+  frontend-docker:
+    name: frontend-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build --tag battlehub-trivia-frontend:ci src/trivia-frontend
+
+      - name: Smoke test
+        run: |
+          docker run --detach --name trivia-frontend --publish 4002:8080 battlehub-trivia-frontend:ci
+          for attempt in $(seq 1 15); do
+            curl --fail --silent --output /dev/null http://localhost:4002/remoteEntry.js && break
+            sleep 1
+          done
+          curl --fail --silent --show-error --head http://localhost:4002/remoteEntry.js | tee headers.txt
+          grep --ignore-case "^access-control-allow-origin: \*" headers.txt
+          curl --fail --silent --show-error http://localhost:4002/ | grep --quiet "<html"
+          docker image ls battlehub-trivia-frontend:ci --format "Imagen del frontend: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Container logs
+        if: failure()
+        run: docker logs trivia-frontend || true
+
+  frontend-status:
+    name: frontend-status
+    if: always()
+    needs: [frontend, frontend-docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate frontend checks
+        run: |
+          if [ "${{ needs.frontend.result }}" != "success" ] || [ "${{ needs.frontend-docker.result }}" != "success" ]; then
+            echo "Uno o más jobs del frontend fallaron"
+            exit 1
+          fi

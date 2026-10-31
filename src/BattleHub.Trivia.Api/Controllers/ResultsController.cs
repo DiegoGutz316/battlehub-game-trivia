@@ -24,7 +24,9 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
     {
         var error = Validate(request);
         if (error is not null)
+        {
             return BadRequest(new { message = error });
+        }
 
         var match = ToDomain(request);
 
@@ -48,7 +50,9 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
     {
         var match = await results.GetByMatchIdAsync(matchId, cancellationToken);
         if (match is null)
+        {
             return NotFound();
+        }
 
         return Ok(ToResponse(match));
     }
@@ -81,39 +85,57 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
     private static string? Validate(SaveMatchResultRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.MatchId))
+        {
             return "matchId es obligatorio.";
+        }
 
         if (request.StartedAt is null || request.FinishedAt is null)
+        {
             return "startedAt y finishedAt son obligatorios.";
+        }
 
         if (request.FinishedAt < request.StartedAt)
+        {
             return "finishedAt no puede ser anterior a startedAt.";
+        }
 
         var gameType = string.IsNullOrWhiteSpace(request.GameType)
             ? MatchResult.GameTypeName
             : request.GameType.Trim();
 
         if (!gameType.Equals(MatchResult.GameTypeName, StringComparison.OrdinalIgnoreCase))
+        {
             return "gameType debe ser trivia.";
+        }
 
         var metadataKind = request.Metadata.ValueKind;
         if (metadataKind is not JsonValueKind.Undefined &&
             metadataKind is not JsonValueKind.Null &&
             metadataKind is not JsonValueKind.Object)
+        {
             return "metadata debe ser un objeto JSON.";
+        }
 
         if (request.Players is null || request.Players.Count == 0)
+        {
             return "players debe incluir al menos un jugador.";
+        }
 
         if (request.Players.Any(player => string.IsNullOrWhiteSpace(player.UserId) || string.IsNullOrWhiteSpace(player.DisplayName)))
+        {
             return "Cada jugador necesita userId y displayName.";
+        }
 
         if (request.Players.Select(player => player.UserId).Distinct(StringComparer.Ordinal).Count() != request.Players.Count)
+        {
             return "userId no puede repetirse dentro de la misma partida.";
+        }
 
         if (request.WinnerUserId is not null &&
             request.Players.All(player => player.UserId != request.WinnerUserId))
+        {
             return "winnerUserId debe ser uno de los jugadores de la partida.";
+        }
 
         return null;
     }
@@ -163,7 +185,9 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
     private static TriviaMetadata ReadMetadata(JsonElement metadata)
     {
         if (metadata.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
             return new TriviaMetadata();
+        }
 
         return JsonSerializer.Deserialize<TriviaMetadata>(metadata, JsonOptions) ?? new TriviaMetadata();
     }
@@ -171,7 +195,9 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
     private static JsonElement WriteMetadata(TriviaMetadata metadata)
     {
         if (metadata.CategoryScores.Count == 0)
+        {
             return JsonSerializer.Deserialize<JsonElement>("{}")!;
+        }
 
         return JsonSerializer.SerializeToElement(metadata, JsonOptions);
     }

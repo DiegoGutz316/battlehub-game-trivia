@@ -1,0 +1,132 @@
+# R-21: segundo flujo de CI — solo compilar y ejecutar pruebas unitarias.
+# Sin despliegues, sin imágenes Docker, sin cobertura ni análisis extra.
+name: CI Unit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/BattleHub.Trivia.Api/**"
+      - "src/BattleHub.Trivia.Data/**"
+      - "src/BattleHub.Trivia.DbInit/**"
+      - "src/BattleHub.Trivia.Domain/**"
+      - "tests/BattleHub.Trivia.UnitTests/**"
+      - "src/trivia-frontend/**"
+      - "BattleHub.Trivia.slnx"
+      - "Directory.Build.props"
+      - ".editorconfig"
+      - "dotnet-tools.json"
+      - ".github/workflows/ci-unit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/BattleHub.Trivia.Api/**"
+      - "src/BattleHub.Trivia.Data/**"
+      - "src/BattleHub.Trivia.DbInit/**"
+      - "src/BattleHub.Trivia.Domain/**"
+      - "tests/BattleHub.Trivia.UnitTests/**"
+      - "src/trivia-frontend/**"
+      - "BattleHub.Trivia.slnx"
+      - "Directory.Build.props"
+      - ".editorconfig"
+      - "dotnet-tools.json"
+      - ".github/workflows/ci-unit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: detect-changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'src/BattleHub.Trivia.Api/**'
+              - 'src/BattleHub.Trivia.Data/**'
+              - 'src/BattleHub.Trivia.DbInit/**'
+              - 'src/BattleHub.Trivia.Domain/**'
+              - 'tests/BattleHub.Trivia.UnitTests/**'
+              - 'BattleHub.Trivia.slnx'
+              - 'Directory.Build.props'
+              - '.editorconfig'
+              - 'dotnet-tools.json'
+              - '.github/workflows/ci-unit.yml'
+            frontend:
+              - 'src/trivia-frontend/**'
+              - '.github/workflows/ci-unit.yml'
+
+  backend-unit:
+    name: backend-unit
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --warnaserror
+
+      - name: Unit tests
+        run: dotnet test tests/BattleHub.Trivia.UnitTests --no-build --verbosity normal
+
+  frontend-unit:
+    name: frontend-unit
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/trivia-frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/trivia-frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: src/trivia-frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npx jest --ci --coverage=false
+
+  unit-status:
+    name: unit-status
+    if: always()
+    needs: [changes, backend-unit, frontend-unit]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate required unit checks
+        run: |
+          fail=0
+          if [ "${{ needs.changes.outputs.backend }}" = "true" ] && [ "${{ needs.backend-unit.result }}" != "success" ]; then
+            echo "backend-unit failed or was cancelled"
+            fail=1
+          fi
+          if [ "${{ needs.changes.outputs.frontend }}" = "true" ] && [ "${{ needs.frontend-unit.result }}" != "success" ]; then
+            echo "frontend-unit failed or was cancelled"
+            fail=1
+          fi
+          exit "$fail"
