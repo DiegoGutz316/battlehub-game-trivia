@@ -103,6 +103,23 @@ Shell (rama `fix/login-unico-juegos`, PR #5) entrega en `GameContext`:
 
 Hoy ambos son el mismo token de la sesión. No se generan tokens en el navegador, no se usa el ID token y el navegador nunca recibe tokens de servicio. El frontend de Trivia (`game-module.ts` y `signalr-trivia-client.ts`) no necesitó cambios: pide un token nuevo al Shell en cada conexión y reconexión.
 
+## Modo práctica
+
+El Shell abre el juego sin sala con `mode: 'practice'` en `GameContext`. No necesita `matchId` ni tokens, y el juego arranca solo al llamar a `start()`. Solo debe ofrecerlo a usuarios con acceso al juego.
+
+```ts
+const context: GameContext = {
+  matchId: '',
+  gameType: 'trivia',
+  currentUser: { id: user.id, displayName: user.displayName },
+  mode: 'practice',
+};
+```
+
+Usa el hub de un solo jugador `/hubs/trivia/practice` y las mismas pantallas que una partida. No se guarda en el historial y no notifica a Matchmaking, porque no hay sala.
+
+> **Contrato propuesto por el Equipo 5, pendiente de confirmar con el Equipo 3.** El documento de requisitos no define cómo el Shell abre este modo.
+
 ## Ejecución del backend
 
 El proyecto utiliza .NET 10 y SQL Server.
