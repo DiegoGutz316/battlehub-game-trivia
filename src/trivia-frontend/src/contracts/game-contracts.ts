@@ -1,10 +1,14 @@
 // Tipos del contrato 03-contratos-tecnicos.md (secciones 5 y 6). Copia idéntica en el Shell y en los juegos.
+export type GameMode = 'match' | 'playground';
+
 export interface GameContext {
   matchId: string;
   gameType: 'typing' | 'trivia' | 'memory';
   currentUser: { id: string; displayName: string };
   getAccessToken?: () => Promise<string>;
   getMatchmakingAccessToken?: () => Promise<string>;
+  /** Sin valor es una partida; 'playground' es el juego abierto sin el Shell. */
+  mode?: GameMode;
 }
 
 export interface GameModule {

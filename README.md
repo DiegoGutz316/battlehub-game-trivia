@@ -177,16 +177,16 @@ El job `frontend-docker` del CI construye la imagen en cada pull request, la lev
 
 `npm start` abre un arnés que simula lo que hace el Shell: llama a `initialize()` con un contexto de prueba y tiene botones para `start()`, `pause()` y `dispose()`. Si el juego rechaza una llamada, muestra el error como lo haría el Shell (`LIFECYCLE_ERROR`).
 
-#### Modo práctica (sin Shell)
+#### Modo playground (sin Shell)
 
-Sin el Shell no hay sesión ni sala de Matchmaking, así que el juego ofrece el botón **Jugar en modo práctica**: una partida de un solo jugador con las mismas pantallas (diez preguntas, temporizador, revisión y resultado) contra el hub anónimo `/hubs/trivia/practice` de la API. La práctica no se guarda en el historial ni cuenta en las estadísticas, y al terminar se puede jugar otra vez. Solo necesita la API corriendo (`dotnet run --project src/BattleHub.Trivia.Api`):
+Sin el Shell no hay sesión ni sala, así que el juego ofrece el botón **Jugar en modo playground**: una partida de un solo jugador con las mismas pantallas (diez preguntas, temporizador, revisión y resultado) contra el hub `/hubs/trivia/practice` de la API. No necesita Auth0 ni ningún otro servicio, solo la API de Trivia. La partida no se guarda en el historial ni cuenta en las estadísticas, y al terminar se puede jugar otra vez.
 
 ```text
 http://localhost:4002/
 http://localhost:4002/?displayName=Jugador%202   (otro nombre para el jugador)
 ```
 
-Cuando el juego se abre desde el Shell, el modo práctica no aparece y todo funciona como una partida normal.
+Cuando el juego se abre desde el Shell, el modo playground no aparece y todo funciona como una partida normal.
 
 #### Integración con el Shell (Module Federation, ADR-003)
 
