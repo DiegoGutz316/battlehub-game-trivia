@@ -1,7 +1,7 @@
 ﻿import { customElement } from 'aurelia';
 import template from './game-module.html';
 import './game-module.css';
-import type { GameContext, GameModule as IGameModule } from './contracts/game-contracts';
+import type { GameContext, GameMode, GameModule as IGameModule } from './contracts/game-contracts';
 import type { TriviaHubClient, Unsubscribe } from './services/trivia-hub/trivia-hub-client';
 import { SignalRTriviaClient } from './services/trivia-hub/signalr-trivia-client';
 import { PracticeTriviaClient } from './services/trivia-hub/practice-trivia-client';
@@ -28,10 +28,9 @@ export class GameModule implements IGameModule {
   public seconds = 0;
   public connection = 'disconnected';
   public error = '';
-  /** Abierto sin el Shell (sin tokens): ofrece el modo práctica en lugar de una partida real. */
-  public preview = false;
-  /** Partida de práctica en curso: un solo jugador, no se guarda en el historial. */
-  public practice = false;
+  public mode: GameMode = 'match';
+  /** Partida de un solo jugador en curso: no se guarda en el historial. */
+  public solo = false;
   public connecting = false;
   public loadingHistory = false;
   public history: HistoryItem[] = [];
@@ -48,17 +47,18 @@ export class GameModule implements IGameModule {
     if (!context?.matchId || context.gameType !== 'trivia' || !context.currentUser?.id)
       throw new Error('Contexto inválido: falta matchId, gameType trivia o currentUser');
     if (this.state !== 'created') throw new Error('El juego ya fue inicializado');
-    if (Boolean(context.getAccessToken) !== Boolean(context.getMatchmakingAccessToken))
+    const mode = context.mode ?? 'match';
+    if (mode === 'match' && (!context.getAccessToken || !context.getMatchmakingAccessToken))
       throw new Error('El Shell debe entregar autorización de Trivia y de Matchmaking.');
     this.context = context;
-    this.preview = !context.getAccessToken;
+    this.mode = mode;
     this.state = 'initialized';
   }
   private live(): boolean { return this.state !== 'disposed'; }
   private async join(): Promise<void> {
     const context = this.context;
     if (!context || !this.live()) return;
-    if (this.practice) { await this.client!.joinMatch({ matchId: context.matchId }); this.joined = true; return; }
+    if (this.solo) { await this.client!.joinMatch({ matchId: context.matchId }); this.joined = true; return; }
     const token = await context.getMatchmakingAccessToken!();
     if (!this.live()) return;
     await this.client!.joinMatch({ matchId: context.matchId, matchmakingAccessToken: token });
@@ -93,8 +93,8 @@ export class GameModule implements IGameModule {
       client.onConnectionStateChanged(state => {
         this.connection = state;
         if (state === 'connected' && this.joined && this.live()) void this.join().catch(() => {
-          if (this.live()) this.error = this.practice
-            ? 'No se pudo recuperar la práctica. Empieza una nueva.'
+          if (this.live()) this.error = this.solo
+            ? 'No se pudo recuperar la partida. Empieza una nueva.'
             : 'No se pudo recuperar la partida. Reabre el juego desde Salas.';
         });
       }),
@@ -110,22 +110,22 @@ export class GameModule implements IGameModule {
     if (!this.live()) throw new Error('El juego ya fue liberado con dispose()');
     if (!this.context) throw new Error('Falta llamar a initialize()');
     if (this.connecting) return;
-    if (this.preview) { this.state = 'running'; return; }
+    if (this.mode === 'playground') { this.state = 'running'; return; }
     if (this.client) { this.state = 'running'; return; }
     await this.connect(new SignalRTriviaClient(apiUrl, this.context.getAccessToken!));
   }
-  /** Sin el Shell: juega una partida de práctica de un solo jugador con las mismas pantallas. */
-  public async startPractice(): Promise<void> {
-    if (!this.preview || !this.context || this.connecting || (this.state !== 'initialized' && this.state !== 'running')) return;
+  /** Sin el Shell: una partida de un solo jugador con las mismas pantallas. */
+  public async playSolo(): Promise<void> {
+    if (this.mode !== 'playground' || !this.context || this.connecting || (this.state !== 'initialized' && this.state !== 'running')) return;
     await this.leave();
     this.phase = 'waiting'; this.players = []; this.question = null; this.review = null; this.result = null;
     this.selectedAnswerId = null; this.answered = false; this.submitting = false; this.seconds = 0; this.error = '';
-    this.connection = 'disconnected'; this.practice = true;
+    this.connection = 'disconnected'; this.solo = true;
     try { await this.connect(new PracticeTriviaClient(apiUrl, this.context.currentUser)); }
     catch (error) {
       if (!this.live()) return;
-      this.practice = false;
-      this.error = error instanceof Error ? error.message : 'No se pudo iniciar la práctica.';
+      this.solo = false;
+      this.error = error instanceof Error ? error.message : 'No se pudo iniciar la partida.';
     }
   }
   private async leave(): Promise<void> {
