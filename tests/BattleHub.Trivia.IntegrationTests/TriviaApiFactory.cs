@@ -3,14 +3,12 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Api.Profiles;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Data.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -38,48 +36,6 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
             => Interlocked.Add(
                 ref ticks,
                 TimeSpan.FromSeconds(seconds).Ticks);
-    }
-
-    private static IMatchmakingGateway CreateRooms()
-    {
-        var rooms = Substitute.For<IMatchmakingGateway>();
-
-        rooms
-            .ValidateAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var id = call.ArgAt<string>(0);
-                var user = call.ArgAt<string>(1);
-                var token = call.ArgAt<string>(2);
-
-                if (token != "room-token" ||
-                    user is not ("player-one" or "player-two"))
-                {
-                    throw new HubException("PLAYER_NOT_IN_MATCH");
-                }
-
-                return Task.FromResult(new MatchRoom(
-                    id,
-                    "trivia",
-                    "Started",
-                    [
-                        new("player-one", "Uno"),
-                        new("player-two", "Dos")
-                    ]
-                ));
-            });
-
-        rooms
-            .FinishAsync(
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(FinishOutcome.Confirmed));
-
-        return rooms;
     }
 
     // Profile: todos tienen games.trivia.play salvo NoPermissionUser.
@@ -242,10 +198,6 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
 
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Clock);
-
-            services.RemoveAll<IMatchmakingGateway>();
-            services.AddSingleton<IMatchmakingGateway>(
-                CreateRooms());
 
             services.RemoveAll<IProfileGateway>();
             services.AddSingleton<IProfileGateway>(

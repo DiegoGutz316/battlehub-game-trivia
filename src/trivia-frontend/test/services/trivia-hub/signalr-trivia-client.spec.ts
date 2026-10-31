@@ -73,10 +73,11 @@ describe('SignalRTriviaClient', () => {
   it('invoca JoinMatch y SubmitAnswer con el contrato del hub', async () => {
     const client = new SignalRTriviaClient('http://api', token);
 
-    await client.joinMatch({ matchId: 'm1', matchmakingAccessToken: 'room-token' });
+    const room = { matchId: 'm1', participants: [{ userId: 'one', displayName: 'Uno' }] };
+    await client.joinMatch(room);
     await client.submitAnswer({ matchId: 'm1', questionId: 'q1', answerId: 'a' });
 
-    expect(mockConnection.invoke).toHaveBeenNthCalledWith(1, 'JoinMatch', { matchId: 'm1', matchmakingAccessToken: 'room-token' });
+    expect(mockConnection.invoke).toHaveBeenNthCalledWith(1, 'JoinMatch', room);
     expect(mockConnection.invoke).toHaveBeenNthCalledWith(2, 'SubmitAnswer', { matchId: 'm1', questionId: 'q1', answerId: 'a' });
   });
 

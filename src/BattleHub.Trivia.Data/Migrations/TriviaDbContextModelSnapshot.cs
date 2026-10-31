@@ -56,45 +56,6 @@ namespace BattleHub.Trivia.Data.Migrations
                     b.ToTable("AnswerOptions", (string)null);
                 });
 
-            modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.FinishNotificationRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("Blocked")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("Delivered")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("MatchId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<Guid>("MatchRefId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset>("NextAttemptAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MatchId")
-                        .IsUnique();
-
-                    b.HasIndex("MatchRefId")
-                        .IsUnique();
-
-                    b.HasIndex("Delivered", "NextAttemptAt");
-
-                    b.ToTable("FinishNotifications", (string)null);
-                });
-
             modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.MatchResultRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -241,15 +202,6 @@ namespace BattleHub.Trivia.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Question");
-                });
-
-            modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.FinishNotificationRecord", b =>
-                {
-                    b.HasOne("BattleHub.Trivia.Data.Persistence.MatchResultRecord", null)
-                        .WithOne()
-                        .HasForeignKey("BattleHub.Trivia.Data.Persistence.FinishNotificationRecord", "MatchRefId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("BattleHub.Trivia.Data.Persistence.PlayerResultRecord", b =>

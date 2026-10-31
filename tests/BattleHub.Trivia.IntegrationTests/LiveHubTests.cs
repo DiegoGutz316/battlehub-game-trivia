@@ -1,22 +1,21 @@
 ﻿using System.Text.Json;
 using System.Threading.Channels;
 using BattleHub.Trivia.Api.Hubs;
-using BattleHub.Trivia.Api.Matchmaking;
-using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Domain.Interfaces;
 using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BattleHub.Trivia.IntegrationTests;
 
 [Collection(TriviaDatabaseCollection.Name)]
 public sealed class LiveHubTests(TriviaApiFactory factory)
 {
+    private static readonly RoomPlayer[] Room = [new("player-one", "Uno"), new("player-two", "Dos")];
+
     [Fact]
-    public async Task TwoAuthenticatedClientsPlayTenRoundsPersistAndNotifyMatchmaking()
+    public async Task TwoPlayersFromTheSameRoomPlayTenRoundsAndPersistTheResult()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var ct = timeout.Token;
@@ -25,11 +24,13 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
         await using var two = Connection("player-two");
         var questions = Channel.CreateUnbounded<JsonElement>();
         var finished = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finishedForTwo = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         one.On<JsonElement>("QuestionStarted", data => { questions.Writer.TryWrite(data); });
         one.On<JsonElement>("GameFinished", data => { finished.TrySetResult(data); });
+        two.On<JsonElement>("GameFinished", data => { finishedForTwo.TrySetResult(data); });
         await one.StartAsync(ct); await two.StartAsync(ct);
-        await one.InvokeAsync("JoinMatch", new JoinRequest(id, "room-token"), ct);
-        await two.InvokeAsync("JoinMatch", new JoinRequest(id, "room-token"), ct);
+        await one.InvokeAsync("JoinMatch", new JoinRequest(id, Room), ct);
+        await two.InvokeAsync("JoinMatch", new JoinRequest(id, Room), ct);
         using var scope = factory.Services.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IQuestionRepository>();
         var sessions = factory.Services.GetRequiredService<TriviaSessions>();
@@ -48,16 +49,24 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
         }
         var result = await finished.Task.WaitAsync(ct);
         Assert.Equal("player-one", result.GetProperty("winnerUserId").GetString());
+        // Los dos jugadores reciben GameFinished: con ese evento el juego avisa al Shell y el Shell a Matchmaking.
+        Assert.Equal(id, (await finishedForTwo.Task.WaitAsync(ct)).GetProperty("matchId").GetString());
         var saved = await scope.ServiceProvider.GetRequiredService<IResultRepository>().GetByMatchIdAsync(id, ct);
         Assert.NotNull(saved);
         Assert.Equal(2200, saved.Players.Single(p => p.UserId == "player-one").Score);
         Assert.Equal(10, saved.Players.Single(p => p.UserId == "player-one").CorrectAnswers);
-        var db = scope.ServiceProvider.GetRequiredService<TriviaDbContext>();
-        Assert.False((await db.FinishNotifications.AsNoTracking().SingleAsync(p => p.MatchId == id, ct)).Delivered);
-        var worker = new FinishWorker(factory.Services.GetRequiredService<IServiceScopeFactory>(),
-            factory.Services.GetRequiredService<IMatchmakingGateway>(), factory.Clock, NullLogger<FinishWorker>.Instance);
-        for (var i = 0; i < 5; i++) await worker.DispatchAsync(ct);
-        Assert.True((await db.FinishNotifications.AsNoTracking().SingleAsync(p => p.MatchId == id, ct)).Delivered);
+    }
+
+    [Fact]
+    public async Task PlayerOutsideTheRoomIsRejected()
+    {
+        await using var outsider = Connection("ajeno");
+        await outsider.StartAsync();
+
+        var error = await Assert.ThrowsAsync<HubException>(() => outsider.InvokeAsync(
+            "JoinMatch", new JoinRequest("room-" + Guid.NewGuid().ToString("N"), Room)));
+
+        Assert.Contains("PLAYER_NOT_IN_MATCH", error.Message);
     }
 
     private HubConnection Connection(string user) => new HubConnectionBuilder().WithUrl("http://localhost/hubs/trivia", options =>
