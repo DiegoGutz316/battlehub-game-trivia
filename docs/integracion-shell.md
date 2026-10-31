@@ -8,7 +8,7 @@ Trivia es una aplicación propia (API, hub de SignalR y microfrontend) y solo se
 
 El Shell inicia la sesión, abre la sala y le dice al juego quién juega. La API de Trivia no valida tokens: confía en lo que recibe del Shell.
 
-> **Contrato propuesto por el Equipo 5, pendiente de confirmar con el Equipo 3.** El documento de requisitos pide comunicación por eventos, pero no define los nombres ni los datos. Lo de esta guía es lo que implementa Trivia hoy.
+> **Contrato pendiente de cerrar con el Equipo 3.** El documento de requisitos pide comunicación por eventos, pero no define los nombres ni los datos. `context.events`, `battlehub:game-finished` y `mode: 'practice'` coinciden con el PR #6 del Shell. `participants` todavía no está en ese PR.
 
 ## Qué debe hacer el Shell
 
@@ -24,6 +24,7 @@ const context: GameContext = {
   gameType: 'trivia',
   currentUser: { id: user.id, displayName: user.displayName },
   participants: room.participants, // [{ userId, displayName }]
+  events: new EventTarget(),
 };
 ```
 
@@ -31,16 +32,14 @@ const context: GameContext = {
 
 ### 2. Escuchar el fin de partida y avisar a Matchmaking
 
-Al terminar una partida, el juego emite un evento en `window`:
+Al terminar una partida, el juego emite un evento en `context.events`, el canal que el Shell crea para esa partida. Si el Shell no entrega `events`, el juego termina igual, pero nadie se entera.
 
 ```ts
-window.addEventListener('battlehub:game-finished', event => {
+context.events.addEventListener('battlehub:game-finished', event => {
   const { matchId, gameType } = (event as CustomEvent).detail;
   // POST /api/matches/{matchId}/finish en Matchmaking, con el bearer del usuario
 });
 ```
-
-El evento va en `window` porque el Shell crea el módulo con `container.invoke` y lo muestra con `au-compose`, así que el juego no conoce su elemento contenedor.
 
 Cada jugador conectado emite su propio evento, y puede llegar otra vez si el jugador se reconecta. No es un problema: `POST /finish` acepta a cualquier participante y no falla si la sala ya está finalizada.
 
@@ -49,11 +48,11 @@ Cada jugador conectado emite su propio evento, y puede llegar otra vez si el jug
 Para abrir el juego sin sala, el Shell usa `mode: 'practice'`. No necesita `matchId` ni `participants`, y el juego arranca solo al llamar a `start()`. Solo debe ofrecerlo a usuarios con acceso al juego.
 
 ```ts
-const context: GameContext = {
-  matchId: '',
+const context = {
+  mode: 'practice',
   gameType: 'trivia',
   currentUser: { id: user.id, displayName: user.displayName },
-  mode: 'practice',
+  events: new EventTarget(),
 };
 ```
 

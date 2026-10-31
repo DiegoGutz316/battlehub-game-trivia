@@ -79,20 +79,24 @@ it('refuses a match without the room players or without the current player', asy
   await expect(new GameModule().initialize({ ...ctx, participants: undefined })).rejects.toThrow('jugadores de la sala');
   await expect(new GameModule().initialize({ ...ctx, participants: [room[1]] })).rejects.toThrow('jugadores de la sala');
 });
-it('tells the Shell when the match ends, and only the Shell talks to Matchmaking', async () => {
+it('tells the Shell through context.events when the match ends, and only the Shell talks to Matchmaking', async () => {
   const finished = jest.fn();
+  const onWindow = jest.fn();
   const fetchMock = jest.fn();
+  const events = new EventTarget();
   const previous = globalThis.fetch; globalThis.fetch = fetchMock;
-  window.addEventListener(GAME_FINISHED_EVENT, finished);
+  events.addEventListener(GAME_FINISHED_EVENT, finished);
+  window.addEventListener(GAME_FINISHED_EVENT, onWindow);
   try {
-    const game = new GameModule(); await game.initialize(ctx); await game.start();
+    const game = new GameModule(); await game.initialize({ ...ctx, events }); await game.start();
     expect(finished).not.toHaveBeenCalled();
     emit('GameFinished', { matchId: 'match', players: [], winnerUserId: 'player-one', isTie: false, decidedByTiebreak: false, finishedAtUtc: new Date().toISOString() });
     expect(finished).toHaveBeenCalledTimes(1);
     expect((finished.mock.calls[0][0] as CustomEvent).detail).toEqual({ matchId: 'match', gameType: 'trivia' });
+    expect(onWindow).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
     await game.dispose();
-  } finally { window.removeEventListener(GAME_FINISHED_EVENT, finished); globalThis.fetch = previous; }
+  } finally { window.removeEventListener(GAME_FINISHED_EVENT, onWindow); globalThis.fetch = previous; }
 });
 it('unsubscribes and clears the countdown after disposal', async () => {
   jest.useFakeTimers();

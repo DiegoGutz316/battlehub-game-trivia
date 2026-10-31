@@ -539,7 +539,7 @@ El cliente es responsable de:
 - Mostrar la fase de revisión de 5 segundos.
 - Actualizar el marcador.
 - Mostrar el resultado final, incluido el desempate o el empate.
-- Avisar al Shell el fin de la partida con el evento `battlehub:game-finished`.
+- Avisar al Shell el fin de la partida con el evento `battlehub:game-finished` en `context.events`.
 - Mostrar los errores recibidos desde el servidor.
 
 ---
