@@ -1,7 +1,7 @@
 ﻿import { customElement } from 'aurelia';
 import template from './game-module.html';
 import './game-module.css';
-import type { GameContext, GameMode, GameModule as IGameModule } from './contracts/game-contracts';
+import { GAME_FINISHED_EVENT, type GameContext, type GameFinishedDetail, type GameMode, type GameModule as IGameModule } from './contracts/game-contracts';
 import type { TriviaHubClient, Unsubscribe } from './services/trivia-hub/trivia-hub-client';
 import { SignalRTriviaClient } from './services/trivia-hub/signalr-trivia-client';
 import { PracticeTriviaClient } from './services/trivia-hub/practice-trivia-client';
@@ -48,8 +48,10 @@ export class GameModule implements IGameModule {
     if (context?.gameType !== 'trivia' || !context.currentUser?.id || (mode === 'match' && !context.matchId))
       throw new Error('Contexto inválido: falta matchId, gameType trivia o currentUser');
     if (this.state !== 'created') throw new Error('El juego ya fue inicializado');
-    if (mode === 'match' && (!context.getAccessToken || !context.getMatchmakingAccessToken))
-      throw new Error('El Shell debe entregar autorización de Trivia y de Matchmaking.');
+    if (mode === 'match' && !context.getAccessToken)
+      throw new Error('El Shell debe entregar autorización de Trivia.');
+    if (mode === 'match' && !context.participants?.some(player => player.userId === context.currentUser.id))
+      throw new Error('El Shell debe entregar los jugadores de la sala.');
     this.context = context;
     this.mode = mode;
     this.state = 'initialized';
@@ -59,10 +61,7 @@ export class GameModule implements IGameModule {
   private async join(): Promise<void> {
     const context = this.context;
     if (!context || !this.live()) return;
-    if (this.solo) { await this.client!.joinMatch({ matchId: context.matchId }); this.joined = true; return; }
-    const token = await context.getMatchmakingAccessToken!();
-    if (!this.live()) return;
-    await this.client!.joinMatch({ matchId: context.matchId, matchmakingAccessToken: token });
+    await this.client!.joinMatch({ matchId: context.matchId, participants: context.participants ?? [] });
     this.joined = true;
   }
   private subscribe(client: TriviaHubClient): void {
@@ -89,7 +88,7 @@ export class GameModule implements IGameModule {
       client.on('PlayerJoined', data => { this.markConnected(data.userId, true); }),
       client.on('PlayerReconnected', data => { this.markConnected(data.userId, true); }),
       client.on('PlayerDisconnected', data => { this.markConnected(data.userId, false); }),
-      client.on('GameFinished', data => { this.phase = 'finished'; this.result = data; }),
+      client.on('GameFinished', data => { this.phase = 'finished'; this.result = data; this.notifyFinished(); }),
       client.on('GameError', data => { this.error = data.message; }),
       client.onConnectionStateChanged(state => {
         this.connection = state;
@@ -100,6 +99,12 @@ export class GameModule implements IGameModule {
         });
       }),
     ];
+  }
+  // R-46: el juego solo avisa al Shell; es el Shell quien notifica a Matchmaking. Sin sala no hay nada que avisar.
+  private notifyFinished(): void {
+    if (this.mode !== 'match' || !this.context) return;
+    const detail: GameFinishedDetail = { matchId: this.context.matchId, gameType: this.context.gameType };
+    window.dispatchEvent(new CustomEvent(GAME_FINISHED_EVENT, { detail }));
   }
   private markConnected(id: string, connected: boolean): void {
     this.players = this.players.map(player => player.userId === id ? { ...player, isConnected: connected } : player);

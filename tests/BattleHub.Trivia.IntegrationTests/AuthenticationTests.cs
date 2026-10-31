@@ -1,14 +1,9 @@
 ﻿using System.Net;
 using System.Net.Http.Headers;
 using BattleHub.Trivia.Api.Hubs;
-using BattleHub.Trivia.Data.Context;
-using BattleHub.Trivia.Data.Repositories;
-using BattleHub.Trivia.Domain.Entities;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace BattleHub.Trivia.IntegrationTests;
 
@@ -58,7 +53,7 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
             options.AccessTokenProvider = () => Task.FromResult<string?>(factory.Token(TriviaApiFactory.NoPermissionUser, writer: false));
         }).Build();
         await connection.StartAsync();
-        var error = await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync("JoinMatch", new JoinRequest("room", "room-token")));
+        var error = await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync("JoinMatch", new JoinRequest("room", [new(TriviaApiFactory.NoPermissionUser, "Sin permiso")])));
         Assert.Contains("PERMISSION_DENIED", error.Message);
     }
 
@@ -81,20 +76,5 @@ public sealed class AuthenticationTests(TriviaApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/games/trivia/players/player-one/history")).StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/games/trivia/players/player-one/history?access_token=" + factory.Token("player-one"))).StatusCode);
-    }
-
-    [Fact]
-    public async Task SavedResultCreatesDurableNotificationInSameDatabase()
-    {
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<TriviaDbContext>();
-        var id = "outbox-" + Guid.NewGuid().ToString("N");
-        await new ResultRepository(db).SaveAsync(new MatchResult {
-            MatchId = id, StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1), FinishedAt = DateTimeOffset.UtcNow,
-            Players = [new PlayerResult { UserId = "player-one", DisplayName = "Jugador", Position = 1 }], WinnerUserId = "player-one"
-        });
-        var pending = await db.FinishNotifications.AsNoTracking().SingleAsync(item => item.MatchId == id);
-        Assert.False(pending.Delivered);
-        Assert.Equal(0, pending.Attempts);
     }
 }

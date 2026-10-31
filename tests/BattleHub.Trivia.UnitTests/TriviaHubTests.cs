@@ -1,14 +1,10 @@
 
 using System.Security.Claims;
 using BattleHub.Trivia.Api.Hubs;
-using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Api.Profiles;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Interfaces;
 using BattleHub.Trivia.Domain.Services;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Connections.Features;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,6 +14,8 @@ namespace BattleHub.Trivia.UnitTests;
 
 public sealed class TriviaHubTests
 {
+    private static readonly RoomPlayer[] OnePlayer = [new("player-one", "Uno")];
+
     private static TriviaSessions CreateSessions(IServiceScopeFactory scopes,
         IHubContext<TriviaHub>? hubContext = null)
     {
@@ -29,227 +27,8 @@ public sealed class TriviaHubTests
             NullLogger<TriviaSessions>.Instance);
     }
 
-    private static ClaimsPrincipal CreateUser(string userId)
-    {
-         return new ClaimsPrincipal(
-             new ClaimsIdentity(
-             [new Claim("sub", userId)],
-             "TestAuth"));
-    }
-
-    private static IProfileGateway AllowedProfiles()
-    {
-        var profiles = Substitute.For<IProfileGateway>();
-
-        profiles
-            .CanPlayAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
-
-        return profiles;
-    }
-
-    private sealed class HttpFeature(HttpContext http) : IHttpContextFeature
-    {
-        public HttpContext? HttpContext { get; set; } = http;
-    }
-
-    [Fact]
-    public async Task JoinMatchRejectsPlayerWithoutTriviaPermission()
-    {
-        using var services = new ServiceCollection()
-            .BuildServiceProvider();
-
-        var sessions = CreateSessions(
-            services.GetRequiredService<IServiceScopeFactory>());
-
-        var matchmaking = Substitute.For<IMatchmakingGateway>();
-        var profiles = Substitute.For<IProfileGateway>();
-        var context = Substitute.For<HubCallerContext>();
-
-        var http = new DefaultHttpContext();
-        http.Request.Headers.Authorization = "Bearer shell-token";
-
-        var features = new FeatureCollection();
-        features.Set<IHttpContextFeature>(new HttpFeature(http));
-
-        context.Items.Returns(new Dictionary<object, object?>());
-        context.User.Returns(CreateUser("player-one"));
-        context.Features.Returns(features);
-
-        profiles
-            .CanPlayAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(false));
-
-        var hub = new TriviaHub(sessions, matchmaking, profiles)
-        {
-            Context = context
-        };
-
-        var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.JoinMatch(new JoinRequest("match-one", "room-token")));
-
-        Assert.Equal("PERMISSION_DENIED", exception.Message);
-
-        await profiles.Received(1).CanPlayAsync(
-            "shell-token",
-            Arg.Any<CancellationToken>());
-
-        await matchmaking.DidNotReceiveWithAnyArgs()
-            .ValidateAsync(default!, default!, default!, default);
-    }
-
-    [Fact]
-    public async Task SubmitAnswerRejectsPlayerWithoutMatch()
-    {
-        using var services = new ServiceCollection()
-            .BuildServiceProvider();
-
-        var sessions = CreateSessions(
-            services.GetRequiredService<IServiceScopeFactory>());
-
-        var matchmaking = Substitute.For<IMatchmakingGateway>();
-        var context = Substitute.For<HubCallerContext>();
-
-        context.Items.Returns(new Dictionary<object, object?>());
-
-        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
-        {
-            Context = context
-        };
-
-        var request = new AnswerRequest("match", "q1", "a");
-
-        var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.SubmitAnswer(request));
-
-        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
-    }
-
-    [Fact]
-    public async Task SubmitAnswerRejectsDifferentMatch()
-    {
-        using var services = new ServiceCollection()
-            .BuildServiceProvider();
-
-        var sessions = CreateSessions(
-            services.GetRequiredService<IServiceScopeFactory>());
-
-        var matchmaking = Substitute.For<IMatchmakingGateway>();
-        var context = Substitute.For<HubCallerContext>();
-
-        context.Items.Returns(
-            new Dictionary<object, object?>
-            {
-                ["room"] = "match-one"
-            });
-
-        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
-        {
-            Context = context
-        };
-
-        var request = new AnswerRequest("match-two", "q1", "a");
-
-        var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.SubmitAnswer(request));
-
-        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
-    }
-
-    [Fact]
-    public async Task JoinMatchRejectsDifferentMatch()
-    {
-        using var services = new ServiceCollection()
-            .BuildServiceProvider();
-
-        var sessions = CreateSessions(
-            services.GetRequiredService<IServiceScopeFactory>());
-
-        var matchmaking = Substitute.For<IMatchmakingGateway>();
-        var context = Substitute.For<HubCallerContext>();
-
-        context.Items.Returns(
-            new Dictionary<object, object?>
-            {
-                ["room"] = "match-one"
-            });
-
-        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
-        {
-            Context = context
-        };
-
-        var request = new JoinRequest("match-two", "room-token");
-
-        var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.JoinMatch(request));
-
-        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
-
-        await matchmaking.DidNotReceiveWithAnyArgs()
-            .ValidateAsync(default!, default!, default!, default);
-    }
-
-    [Fact]
-    public async Task JoinMatchRejectsInvalidMatchmakingToken()
-    {
-        using var services = new ServiceCollection()
-            .BuildServiceProvider();
-
-        var sessions = CreateSessions(
-            services.GetRequiredService<IServiceScopeFactory>());
-
-        var matchmaking = Substitute.For<IMatchmakingGateway>();
-        var context = Substitute.For<HubCallerContext>();
-
-        context.Items.Returns(new Dictionary<object, object?>());
-        context.User.Returns(CreateUser("player-one"));
-
-        matchmaking
-            .ValidateAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<MatchRoom>(
-                new HubException("MATCH_NOT_FOUND")));
-
-        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
-        {
-            Context = context
-        };
-
-        var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.JoinMatch(
-                new JoinRequest("match-one", "invalid-token")));
-
-        Assert.Equal("MATCH_NOT_FOUND", exception.Message);
-    }
-
-    [Fact]
-    public async Task OnDisconnectedWithoutMatchDoesNotFail()
-    {
-        using var services = new ServiceCollection()
-            .BuildServiceProvider();
-
-        var sessions = CreateSessions(
-            services.GetRequiredService<IServiceScopeFactory>());
-
-        var matchmaking = Substitute.For<IMatchmakingGateway>();
-        var context = Substitute.For<HubCallerContext>();
-
-        context.Items.Returns(new Dictionary<object, object?>());
-
-        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
-        {
-            Context = context
-        };
-
-        await hub.OnDisconnectedAsync(null);
-    }
-
-    [Fact]
-    public async Task JoinMatchAddsPlayerToSignalRGroup()
+    // Banco de diez preguntas y ninguna partida guardada: suficiente para crear una sesión real.
+    private static ServiceProvider CreateGameServices()
     {
         var results = Substitute.For<IResultRepository>();
 
@@ -285,11 +64,14 @@ public sealed class TriviaHubTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(bank));
 
-        using var services = new ServiceCollection()
-            .AddSingleton<IResultRepository>(results)
-            .AddSingleton<IQuestionRepository>(questions)
+        return new ServiceCollection()
+            .AddSingleton(results)
+            .AddSingleton(questions)
             .BuildServiceProvider();
+    }
 
+    private static IHubContext<TriviaHub> CreateHubContext()
+    {
         var client = Substitute.For<ISingleClientProxy>();
         var hubClients = Substitute.For<IHubClients>();
 
@@ -304,46 +86,155 @@ public sealed class TriviaHubTests
         var hubContext = Substitute.For<IHubContext<TriviaHub>>();
         hubContext.Clients.Returns(hubClients);
 
-        var sessions = CreateSessions(
-            services.GetRequiredService<IServiceScopeFactory>(),
-            hubContext);
+        return hubContext;
+    }
 
-        var matchmaking = Substitute.For<IMatchmakingGateway>();
+    private static IProfileGateway Profiles(bool canPlay = true)
+    {
+        var profiles = Substitute.For<IProfileGateway>();
+
+        profiles
+            .CanPlayAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(canPlay));
+
+        return profiles;
+    }
+
+    private static HubCallerContext CreateContext(
+        Dictionary<object, object?>? items = null,
+        string connectionId = "connection-one",
+        string userId = "player-one")
+    {
         var context = Substitute.For<HubCallerContext>();
-        var groups = Substitute.For<IGroupManager>();
 
-        context.Items.Returns(new Dictionary<object, object?>());
-        context.ConnectionId.Returns("connection-one");
-        context.User.Returns(CreateUser("player-one"));
+        context.Items.Returns(items ?? []);
+        context.ConnectionId.Returns(connectionId);
+        context.User.Returns(new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", userId)], "TestAuth")));
 
-        var room = new MatchRoom(
-            "match-one",
-            "trivia",
-            "Started",
-            [new RoomPlayer("player-one", "Uno")]);
+        return context;
+    }
 
-        matchmaking
-            .ValidateAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(room));
-
-        var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
+    private static TriviaHub CreateHub(TriviaSessions sessions, HubCallerContext context, IGroupManager? groups = null, IProfileGateway? profiles = null) =>
+        new(sessions, profiles ?? Profiles())
         {
             Context = context,
-            Groups = groups
+            Groups = groups ?? Substitute.For<IGroupManager>()
         };
 
-        await hub.JoinMatch(
-            new JoinRequest("match-one", "room-token"));
+    private static TriviaSessions CreateUnusedSessions() =>
+        CreateSessions(new ServiceCollection()
+            .BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>());
 
-        await matchmaking.Received(1).ValidateAsync(
-            "match-one",
-            "player-one",
-            "room-token",
-            Arg.Any<CancellationToken>());
+    [Fact]
+    public async Task SubmitAnswerRejectsPlayerWithoutMatch()
+    {
+        var hub = CreateHub(CreateUnusedSessions(), CreateContext());
+
+        var exception = await Assert.ThrowsAsync<HubException>(
+            () => hub.SubmitAnswer(new AnswerRequest("match", "q1", "a")));
+
+        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
+    }
+
+    [Fact]
+    public async Task SubmitAnswerRejectsDifferentMatch()
+    {
+        var context = CreateContext(new Dictionary<object, object?>
+        {
+            ["room"] = "match-one"
+        });
+        var hub = CreateHub(CreateUnusedSessions(), context);
+
+        var exception = await Assert.ThrowsAsync<HubException>(
+            () => hub.SubmitAnswer(new AnswerRequest("match-two", "q1", "a")));
+
+        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
+    }
+
+    [Fact]
+    public async Task JoinMatchRejectsDifferentMatchOnSameConnection()
+    {
+        var groups = Substitute.For<IGroupManager>();
+        var context = CreateContext(new Dictionary<object, object?>
+        {
+            ["room"] = "match-one"
+        });
+        var hub = CreateHub(CreateUnusedSessions(), context, groups);
+
+        var exception = await Assert.ThrowsAsync<HubException>(
+            () => hub.JoinMatch(new JoinRequest("match-two", OnePlayer)));
+
+        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
+        await groups.DidNotReceiveWithAnyArgs()
+            .AddToGroupAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task JoinMatchRejectsPlayerWithoutTriviaPermission()
+    {
+        var groups = Substitute.For<IGroupManager>();
+        var hub = CreateHub(CreateUnusedSessions(), CreateContext(), groups, Profiles(canPlay: false));
+
+        var exception = await Assert.ThrowsAsync<HubException>(
+            () => hub.JoinMatch(new JoinRequest("match-one", OnePlayer)));
+
+        Assert.Equal("PERMISSION_DENIED", exception.Message);
+        await groups.DidNotReceiveWithAnyArgs()
+            .AddToGroupAsync(default!, default!, default);
+    }
+
+    public static TheoryData<string, string, RoomPlayer[]?, string> InvalidRooms => new()
+    {
+        { "", "player-one", OnePlayer, "MATCH_NOT_FOUND" },
+        { "   ", "player-one", OnePlayer, "MATCH_NOT_FOUND" },
+        { new string('m', 65), "player-one", OnePlayer, "MATCH_NOT_FOUND" },
+        { "match", "player-one", null, "PLAYER_NOT_IN_MATCH" },
+        { "match", "player-one", [], "PLAYER_NOT_IN_MATCH" },
+        { "match", "ajeno", OnePlayer, "PLAYER_NOT_IN_MATCH" },
+        { "match", "player-one", [new("player-one", "Uno"), new("player-one", "Otra vez")], "PLAYER_NOT_IN_MATCH" },
+        { "match", "player-one", [new("player-one", " ")], "PLAYER_NOT_IN_MATCH" },
+        { "match", " ", [new(" ", "Uno")], "PLAYER_NOT_IN_MATCH" },
+        { "match", new string('u', 65), [new(new string('u', 65), "Uno")], "PLAYER_NOT_IN_MATCH" },
+        { "match", "player-one", [new("player-one", new string('n', 101))], "PLAYER_NOT_IN_MATCH" },
+        { "match", "p0", Enumerable.Range(0, 21).Select(i => new RoomPlayer("p" + i, "Jugador")).ToArray(), "PLAYER_NOT_IN_MATCH" }
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidRooms))]
+    public async Task JoinMatchRejectsInvalidRoom(string matchId, string userId, RoomPlayer[]? players, string expected)
+    {
+        var groups = Substitute.For<IGroupManager>();
+        var hub = CreateHub(CreateUnusedSessions(), CreateContext(userId: userId), groups);
+
+        var exception = await Assert.ThrowsAsync<HubException>(
+            () => hub.JoinMatch(new JoinRequest(matchId, players!)));
+
+        Assert.Equal(expected, exception.Message);
+        await groups.DidNotReceiveWithAnyArgs()
+            .AddToGroupAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task OnDisconnectedWithoutMatchDoesNotFail()
+    {
+        var hub = CreateHub(CreateUnusedSessions(), CreateContext());
+
+        await hub.OnDisconnectedAsync(null);
+    }
+
+    [Fact]
+    public async Task JoinMatchAddsPlayerToSignalRGroup()
+    {
+        using var services = CreateGameServices();
+        var sessions = CreateSessions(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            CreateHubContext());
+        var groups = Substitute.For<IGroupManager>();
+        var context = CreateContext();
+        var hub = CreateHub(sessions, context, groups);
+
+        await hub.JoinMatch(new JoinRequest("match-one", OnePlayer));
 
         await groups.Received(1).AddToGroupAsync(
             "connection-one",
@@ -352,103 +243,39 @@ public sealed class TriviaHubTests
 
         Assert.Equal("match-one", context.Items["room"]);
 
-        await hub.SubmitAnswer(
-           new AnswerRequest(
-           "match-one",
-            "q1",
-         "a"));
+        await hub.SubmitAnswer(new AnswerRequest("match-one", "q1", "a"));
     }
 
     [Fact]
-public async Task JoinMatchRemovesPlayerFromGroupWhenSessionFails()
-{
-    var results = Substitute.For<IResultRepository>();
-
-    results
-        .GetByMatchIdAsync(
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>())
-        .Returns(Task.FromResult<MatchResult?>(null));
-
-    var questions = Substitute.For<IQuestionRepository>();
-
-    IReadOnlyList<Question> bank = Enumerable.Range(1, 10)
-        .Select(i => new Question
-        {
-            QuestionId = "q" + i,
-            Text = "Pregunta " + i,
-            Category = "General",
-            CorrectAnswerId = "a",
-            Options = new[] { "a", "b", "c", "d" }
-                .Select(id => new AnswerOption
-                {
-                    AnswerId = id,
-                    Text = id
-                })
-                .ToArray()
-        })
-        .ToArray();
-
-    questions
-        .DrawAsync(
-            Arg.Any<int>(),
-            Arg.Any<QuestionFilter?>(),
-            Arg.Any<CancellationToken>())
-        .Returns(Task.FromResult(bank));
-
-    using var services = new ServiceCollection()
-        .AddSingleton<IResultRepository>(results)
-        .AddSingleton<IQuestionRepository>(questions)
-        .BuildServiceProvider();
-
-    var sessions = CreateSessions(
-        services.GetRequiredService<IServiceScopeFactory>());
-
-    var matchmaking = Substitute.For<IMatchmakingGateway>();
-    var context = Substitute.For<HubCallerContext>();
-    var groups = Substitute.For<IGroupManager>();
-
-    context.Items.Returns(new Dictionary<object, object?>());
-    context.ConnectionId.Returns("connection-one");
-    context.User.Returns(CreateUser("player-one"));
-
-    var room = new MatchRoom(
-        "match-one",
-        "trivia",
-        "Started",
-        [new RoomPlayer("player-two", "Dos")]);
-
-    matchmaking
-        .ValidateAsync(
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>())
-        .Returns(Task.FromResult(room));
-
-    var hub = new TriviaHub(sessions, matchmaking, AllowedProfiles())
+    public async Task FirstJoinDefinesRosterAndLaterPlayerOutsideItIsRemovedFromGroup()
     {
-        Context = context,
-        Groups = groups
-    };
+        using var services = CreateGameServices();
+        var sessions = CreateSessions(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            CreateHubContext());
 
-    var exception = await Assert.ThrowsAsync<HubException>(
-        () => hub.JoinMatch(
-            new JoinRequest("match-one", "room-token")));
+        await CreateHub(sessions, CreateContext())
+            .JoinMatch(new JoinRequest("match-one", OnePlayer));
 
-    Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
+        var groups = Substitute.For<IGroupManager>();
+        var context = CreateContext(connectionId: "connection-two", userId: "player-two");
+        var hub = CreateHub(sessions, context, groups);
 
-    await groups.Received(1).AddToGroupAsync(
-        "connection-one",
-        "match-one",
-        Arg.Any<CancellationToken>());
+        var exception = await Assert.ThrowsAsync<HubException>(
+            () => hub.JoinMatch(new JoinRequest("match-one", [new("player-two", "Dos")])));
 
-    await groups.Received(1).RemoveFromGroupAsync(
-        "connection-one",
-        "match-one",
-        Arg.Any<CancellationToken>());
+        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
 
-    Assert.False(context.Items.ContainsKey("room"));
-}
+        await groups.Received(1).AddToGroupAsync(
+            "connection-two",
+            "match-one",
+            Arg.Any<CancellationToken>());
 
+        await groups.Received(1).RemoveFromGroupAsync(
+            "connection-two",
+            "match-one",
+            Arg.Any<CancellationToken>());
+
+        Assert.False(context.Items.ContainsKey("room"));
+    }
 }
