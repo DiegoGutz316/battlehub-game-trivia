@@ -76,8 +76,6 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Trivia: ${ConnectionStrings__Trivia:?Definir ConnectionStrings__Trivia en el archivo .env}
-      Cors__Origins__0: http://localhost:4000
-      Cors__Origins__1: http://localhost:4002
     depends_on:
       db-seed:
         condition: service_completed_successfully
@@ -101,7 +99,7 @@ services:
       context: src/trivia-frontend
       dockerfile: Dockerfile
       args:
-        TRIVIA_API_URL: ${TRIVIA_API_URL:-http://localhost:5185}
+        TRIVIA_API_URL: ${TRIVIA_API_URL:?Definir TRIVIA_API_URL en el archivo .env}
     image: battlehub-trivia-frontend:local
     ports:
       - "4002:8080"

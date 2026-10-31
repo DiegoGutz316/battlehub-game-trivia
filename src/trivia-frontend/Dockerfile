@@ -7,7 +7,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
 # Webpack escribe la URL de la API dentro del bundle: se define al construir, no al ejecutar.
-ARG TRIVIA_API_URL=http://localhost:5185
+ARG TRIVIA_API_URL
 ENV TRIVIA_API_URL=${TRIVIA_API_URL}
 RUN npm run build
 

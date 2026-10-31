@@ -17,6 +17,7 @@ permissions:
 env:
   COVERAGE_THRESHOLD: "85"
   ENFORCE_COVERAGE: "true"
+  TRIVIA_API_URL: http://localhost:5185
 
 jobs:
   changes:
@@ -84,7 +85,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build image
-        run: docker build --tag battlehub-trivia-frontend:ci src/trivia-frontend
+        run: docker build --build-arg TRIVIA_API_URL --tag battlehub-trivia-frontend:ci src/trivia-frontend
 
       - name: Smoke test
         run: |

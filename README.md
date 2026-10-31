@@ -102,7 +102,7 @@ Problemas frecuentes:
 
 Requisito: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
 
-Preparar esquema y datos, luego arrancar la API (LocalDB por defecto si no hay cadena de conexión):
+Preparar esquema y datos, luego arrancar la API. `DbInit` necesita `ConnectionStrings__Trivia` definida en la terminal; `dotnet run` de la API usa la de `launchSettings.json` (LocalDB):
 
 ```bash
 dotnet restore
@@ -252,14 +252,14 @@ npx jest
 
 ## Configuración y secretos
 
-Ningún valor sensible (contraseñas, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles.
+Ningún valor sensible (contraseñas, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles. Si falta un valor obligatorio, la API o la compilación del frontend fallan con un mensaje claro, en lugar de usar uno por defecto.
 
 | Clave en `appsettings.json` | Variable de entorno                    | ¿Sensible?                          | Dónde va                                                                                                             |
 | --------------------------- | -------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `ConnectionStrings:Trivia`  | `ConnectionStrings__Trivia`            | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                      |
-| `Cors:Origins`              | `Cors__Origins__0`, `Cors__Origins__1` | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                          |
+| `ConnectionStrings:Trivia` | `ConnectionStrings__Trivia` | Sí, si incluye usuario y contraseña | **Obligatoria.** Docker o servidor: variable de entorno. En local, `launchSettings.json` usa LocalDB |
+| `Cors:Origins` | `Cors__Origins__0`, `Cors__Origins__1` | No | **Obligatoria.** Docker o servidor: variable de entorno. En local, `launchSettings.json` |
 | `MSSQL_SA_PASSWORD`         | `MSSQL_SA_PASSWORD`                    | **Sí**                              | Solo en `.env` para Docker Compose                                                                                   |
-| `TRIVIA_API_URL` (frontend) | `TRIVIA_API_URL`                       | No                                  | Build-arg del frontend / variable antes de `npm start` o `npm run build`. En Compose: URL del navegador hacia la API |
+| `TRIVIA_API_URL` (frontend) | `TRIVIA_API_URL` | No | **Obligatoria.** Se escribe en el bundle al compilar: en Compose sale de `.env`, y con `npm start` del `.env` de la raíz. Es la URL del navegador hacia la API |
 
 **En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno _Development_:
 

@@ -8,10 +8,10 @@ public sealed class TriviaDbContextFactory : IDesignTimeDbContextFactory<TriviaD
     public TriviaDbContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<TriviaDbContext>();
-        // Solo para generar migraciones. En ejecución la cadena sale de user-secrets.
+        // Solo para dotnet ef. Generar una migración no abre la conexión; para aplicarla hay que definir la variable.
         TriviaDbContext.ConfigureSqlServer(
             options,
-            "Server=(localdb)\\mssqllocaldb;Database=BattleHubTrivia;Trusted_Connection=True;TrustServerCertificate=True");
+            Environment.GetEnvironmentVariable("ConnectionStrings__Trivia") ?? "Server=sin-configurar");
 
         return new TriviaDbContext(options.Options);
     }
