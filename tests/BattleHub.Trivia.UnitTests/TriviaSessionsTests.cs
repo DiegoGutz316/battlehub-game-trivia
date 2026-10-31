@@ -1,7 +1,6 @@
 
 using System.Text.Json;
 using BattleHub.Trivia.Api.Hubs;
-using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Interfaces;
 using BattleHub.Trivia.Domain.Services;
@@ -170,8 +169,6 @@ public sealed class TriviaSessionsTests
 
         var room = new MatchRoom(
             "match",
-            "trivia",
-            "Started",
             [
                 new("player-one", "Uno"),
                 new("player-two", "Dos")
@@ -297,8 +294,6 @@ public sealed class TriviaSessionsTests
 
         var room = new MatchRoom(
             "reconnect",
-            "trivia",
-            "Started",
             [
                 new("player-one", "Uno"),
                 new("player-two", "Dos")

@@ -1,8 +1,5 @@
 
-using BattleHub.Trivia.Api.Auth;
 using BattleHub.Trivia.Api.Hubs;
-using BattleHub.Trivia.Api.Matchmaking;
-using BattleHub.Trivia.Api.Profiles;
 using BattleHub.Trivia.Data;
 using BattleHub.Trivia.Domain.Services;
 
@@ -14,7 +11,6 @@ builder.Services.AddHealthChecks();
 builder.Services.AddProblemDetails();
 
 builder.Services.AddTriviaData(builder.Configuration);
-builder.Services.AddTriviaAuth(builder.Configuration);
 
 builder.Services.AddSignalR(options =>
 {
@@ -39,42 +35,7 @@ builder.Services.AddSingleton<TriviaGameService>();
 builder.Services.AddSingleton<TriviaSessions>();
 builder.Services.AddSingleton<PracticeSessions>();
 builder.Services.AddHostedService<PracticeWorker>();
-foreach (var name in new[] { "Matchmaking", "ServiceToken", "Profile" })
-{
-    builder.Services.AddHttpClient(
-        name,
-        client => client.Timeout = TimeSpan.FromSeconds(5))
-        .ConfigurePrimaryHttpMessageHandler(() =>
-            new HttpClientHandler
-            {
-                AllowAutoRedirect = false
-            });
-}
-
-builder.Services.AddSingleton<IMatchmakingTokenProvider>(services =>
-    new ClientCredentialsTokenProvider(
-        services.GetRequiredService<IHttpClientFactory>()
-            .CreateClient("ServiceToken"),
-        builder.Configuration,
-        services.GetRequiredService<TimeProvider>()));
-
-builder.Services.AddSingleton<IProfileGateway>(services =>
-    new ProfileGateway(
-        services.GetRequiredService<IHttpClientFactory>()
-            .CreateClient("Profile"),
-        builder.Configuration));
-
-builder.Services.AddSingleton<IMatchmakingGateway>(services =>
-    new MatchmakingGateway(
-        services.GetRequiredService<IHttpClientFactory>()
-            .CreateClient("Matchmaking"),
-        builder.Configuration,
-        services.GetRequiredService<TimeProvider>(),
-        services.GetRequiredService<ILogger<MatchmakingGateway>>(),
-        services.GetRequiredService<IMatchmakingTokenProvider>()));
-
 builder.Services.AddHostedService<TriviaWorker>();
-builder.Services.AddHostedService<FinishWorker>();
 
 var app = builder.Build();
 
@@ -89,19 +50,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseExceptionHandler();
 app.UseCors();
-app.UseAuthentication();
-app.UseAuthorization();
 
 app.MapControllers();
 
-app.MapHub<TriviaHub>(
-    "/hubs/trivia",
-    options => options.CloseOnAuthenticationExpiration = true);
+app.MapHub<TriviaHub>("/hubs/trivia");
 
-app.MapHub<PracticeHub>("/hubs/trivia/practice")
-    .AllowAnonymous();
+app.MapHub<PracticeHub>("/hubs/trivia/practice");
 
-app.MapHealthChecks("/health").AllowAnonymous();
+app.MapHealthChecks("/health");
 
 app.Run();
 

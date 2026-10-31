@@ -5,6 +5,7 @@ describe('readDevContext', () => {
     expect(readDevContext('')).toEqual({
       matchId: 'match-dev-001',
       gameType: 'trivia',
+      mode: 'playground',
       currentUser: { id: 'user-dev-1', displayName: 'Jugador 1' },
     });
   });

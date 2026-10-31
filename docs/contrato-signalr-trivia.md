@@ -21,15 +21,11 @@ Este documento define la comunicación en tiempo real entre el cliente y el serv
 
 ## Identidad del jugador
 
-Trivia Battle no tiene login propio. El hub acepta el access token de la sesión del Shell (`getAccessToken()` de `GameContext`), firmado con RS256 por el emisor `Auth:Issuer` y con la audiencia de la plataforma `Auth:Audience` (`https://api.battlehub.local/profile`). El navegador lo envía como `access_token` al conectarse. Las claves de firma se obtienen del emisor, no se configuran a mano. Los tokens de servicio no pueden conectarse al hub.
+Trivia Battle no tiene login propio y no tiene contacto con Auth0, Profile ni Matchmaking. El Shell inicia la sesión y abre la sala; el microfrontend recibe en `GameContext` el usuario actual y los jugadores de la sala.
 
-El identificador `userId` se obtiene del claim `sub` del JWT autenticado. El nombre visible del jugador se obtiene de la información de la sala devuelta por Matchmaking. No se aceptan identificadores de usuario enviados por URL para sustituir la autenticación.
+Para unirse a una partida, el cliente utiliza `JoinMatch({ matchId, userId, participants })`. El hub no valida tokens: confía en esos datos. Una vez que una conexión se une, queda asociada a ese jugador y a esa partida, y `SubmitAnswer` usa ese jugador.
 
-Para unirse a una partida, el cliente utiliza `JoinMatch({ matchId, matchmakingAccessToken })`. El primer valor identifica la partida y el segundo es el token de `getMatchmakingAccessToken()`, con el que el servidor solicita a Matchmaking la validación del jugador y su pertenencia a la sala. Antes, el servidor comprueba en Profile, con el token de la conexión, que el jugador tenga el permiso `games.trivia.play`.
-
-Para notificar la finalización de partidas, el backend usa su propio token de servicio (client credentials, permiso `matches.finish`), que obtiene y renueva sin intervención del jugador.
-
-Para más información, consultar la [guía de integración con Matchmaking](integracion-shell-matchmaking.md).
+Al terminar, el fin de partida se avisa al Shell, no a Matchmaking. Para más información, consultar la [guía de integración con el Shell](integracion-shell.md).
 
 ---
 
@@ -78,16 +74,21 @@ Solicita unirse o reincorporarse a una partida.
 ### Datos
 
 - `matchId`: identificador de la partida.
-- `matchmakingAccessToken`: token utilizado para validar con Matchmaking que el jugador pertenece a la partida.
+- `userId`: identificador del jugador que se une.
+- `participants`: jugadores de la sala, con `userId` y `displayName`. Debe incluir a `userId`.
 
 ```json
 {
   "matchId": "match-001",
-  "matchmakingAccessToken": "TOKEN_DEL_JUGADOR"
+  "userId": "user-001",
+  "participants": [
+    { "userId": "user-001", "displayName": "Francisco" },
+    { "userId": "user-002", "displayName": "Ana" }
+  ]
 }
 ```
 
-El token es un valor de ejemplo. En una integración real debe proporcionarse un token válido y aceptado por Matchmaking.
+El primer jugador que se une crea la partida con esa lista. Las llamadas siguientes no la cambian.
 
 La operación es idempotente para un mismo jugador y partida. Si un jugador pierde la conexión y vuelve a ejecutar `JoinMatch`, recupera su participación existente, con su puntaje, y no se agrega como jugador duplicado.
 
@@ -98,9 +99,6 @@ Después de unirse correctamente, el servidor envía `CurrentState` al jugador y
 - `MATCH_NOT_FOUND`: la partida no existe.
 - `PLAYER_NOT_IN_MATCH`: el jugador no pertenece a la partida.
 - `MATCH_FINISHED`: la partida ya terminó.
-- `UNAUTHORIZED`: no se pudo identificar al jugador mediante un JWT válido.
-- `PERMISSION_DENIED`: el jugador no tiene el permiso `games.trivia.play` en Profile.
-- `PROFILE_UNAVAILABLE`: no se pudo consultar Profile para comprobar el permiso; se puede reintentar.
 
 ## SubmitAnswer
 
@@ -457,9 +455,6 @@ Comunica un error relacionado con una operación del juego.
 | `MATCH_NOT_FOUND`     | JoinMatch, SubmitAnswer | La partida no existe                  |
 | `PLAYER_NOT_IN_MATCH` | JoinMatch, SubmitAnswer | El jugador no pertenece a la partida  |
 | `MATCH_FINISHED`      | JoinMatch               | La partida ya terminó                 |
-| `UNAUTHORIZED`        | JoinMatch               | No se pudo identificar al jugador     |
-| `PERMISSION_DENIED`   | JoinMatch               | Sin permiso `games.trivia.play`       |
-| `PROFILE_UNAVAILABLE` | JoinMatch               | Profile no respondió                  |
 | `QUESTION_NOT_ACTIVE` | SubmitAnswer            | La pregunta no es la activa           |
 | `QUESTION_CLOSED`     | SubmitAnswer            | La respuesta llegó fuera de tiempo    |
 | `ALREADY_ANSWERED`    | SubmitAnswer            | El jugador ya respondió esta pregunta |
@@ -496,8 +491,8 @@ Después del cierre de una pregunta se inicia una fase `reviewing` de 5 segundos
 
 # Secuencia de una partida
 
-1. Cada jugador llama a `JoinMatch` con `matchId` y `matchmakingAccessToken`. Después de validar su participación, recibe `CurrentState` (`phase: waiting`). El grupo recibe `PlayerJoined`.
-2. Cuando BattleHub o el servicio responsable del matchmaking indique que la partida está lista, el servidor envía `GameStarted` y el primer `QuestionStarted` (`phase: playing`).
+1. Cada jugador llama a `JoinMatch` con `matchId`, `userId` y `participants`. Después de validar su participación, recibe `CurrentState` (`phase: waiting`). El grupo recibe `PlayerJoined`.
+2. Cuando todos los jugadores de la lista están conectados, el servidor envía `GameStarted` y el primer `QuestionStarted` (`phase: playing`).
 3. Cada jugador puede llamar una sola vez a `SubmitAnswer` para la pregunta activa y recibe `AnswerReceived`.
 4. La pregunta se cierra cuando todos los jugadores activos hayan respondido o cuando se alcance `expiresAtUtc`. Cada jugador recibe su `QuestionClosed` y el grupo recibe `ScoreboardUpdated` (`phase: reviewing`).
 5. Durante 5 segundos se muestra el resultado de la pregunta. Al llegar `nextQuestionAtUtc`, se inicia la siguiente pregunta y se repiten los pasos 3 a 5 hasta completar la pregunta 10.
@@ -515,7 +510,6 @@ Si un jugador se reconecta durante una pregunta activa, todavía queda tiempo di
 
 El servidor es responsable de:
 
-- Identificar al jugador.
 - Mantener el estado de la partida.
 - Controlar el temporizador y la pausa entre preguntas.
 - Cerrar anticipadamente una pregunta cuando todos los jugadores activos hayan respondido.
@@ -545,21 +539,15 @@ El cliente es responsable de:
 - Mostrar la fase de revisión de 5 segundos.
 - Actualizar el marcador.
 - Mostrar el resultado final, incluido el desempate o el empate.
+- Avisar al Shell el fin de la partida con el evento `battlehub:game-finished`.
 - Mostrar los errores recibidos desde el servidor.
 
 ---
 
 # Cambios respecto a la versión anterior
 
-- Login único con Shell: el hub acepta el token de la sesión del Shell (emisor `Auth:Issuer`, audiencia `https://api.battlehub.local/profile`) en lugar del emisor `battlehub-trivia` y la audiencia `battlehub-trivia-api`; las claves de firma se obtienen del emisor.
-- `JoinMatch` comprueba el permiso `games.trivia.play` en Profile; se agregaron los errores `PERMISSION_DENIED` y `PROFILE_UNAVAILABLE`.
-- El token de servicio para la finalización se obtiene y renueva con client credentials; se eliminó `Matchmaking:ServiceToken`.
+- Etapa 2 (R-30, R-46): el hub ya no valida tokens ni consulta Profile o Matchmaking. `JoinMatch` recibe `matchId`, `userId` y `participants`; se eliminaron `matchmakingAccessToken` y el error `UNAUTHORIZED`.
 - Se agregó `serverTimeUtc` a los eventos relacionados con tiempo para corregir relojes locales desfasados.
-- Se actualizó la autenticación de Trivia Battle para utilizar JWT propio con firma RS256.
-- Se establecieron el emisor `battlehub-trivia` y la audiencia `battlehub-trivia-api`.
-- Se documentó el parámetro `matchmakingAccessToken` requerido por `JoinMatch`.
-- Se aclaró que la compatibilidad de autenticación con Matchmaking todavía requiere coordinación entre equipos.
-- Se documentó el proveedor `IMatchmakingTokenProvider` para las notificaciones de finalización de partidas.
 - Se agregaron las estructuras comunes `Player` y `Question`.
 - La lista de jugadores incluye a los jugadores que aún no se han conectado.
 - Se agregó la fase `reviewing`, con una duración de 5 segundos.

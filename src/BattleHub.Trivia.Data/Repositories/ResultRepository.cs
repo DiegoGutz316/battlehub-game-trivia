@@ -20,10 +20,7 @@ public sealed class ResultRepository(TriviaDbContext db) : IResultRepository
             throw new MatchAlreadyExistsException(result.MatchId);
         }
 
-        var match = ToRecord(result);
-        // Add genera el Guid de la partida, que la notificación usa como llave foránea.
-        db.MatchResults.Add(match);
-        db.FinishNotifications.Add(new FinishNotificationRecord { MatchId = result.MatchId, MatchRefId = match.Id });
+        db.MatchResults.Add(ToRecord(result));
 
         try
         {

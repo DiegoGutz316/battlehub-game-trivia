@@ -1,15 +1,12 @@
 using System.Text.Json;
-using BattleHub.Trivia.Api.Auth;
 using BattleHub.Trivia.Api.Dtos;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Exceptions;
 using BattleHub.Trivia.Domain.Interfaces;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BattleHub.Trivia.Api.Controllers;
 
-[Authorize(Policy = TriviaAuth.Read)]
 [ApiController]
 [Route("api/games/trivia")]
 public sealed class ResultsController(IResultRepository results) : ControllerBase
@@ -20,7 +17,6 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
         PropertyNameCaseInsensitive = true
     };
 
-    [Authorize(Policy = TriviaAuth.Write)]
     [HttpPost("results")]
     public async Task<ActionResult<MatchResultResponse>> Create(
         SaveMatchResultRequest request,
@@ -58,11 +54,6 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
             return NotFound();
         }
 
-        if (!TriviaAuth.IsWriter(User) && !match.Players.Any(p => p.UserId == TriviaAuth.UserId(User)))
-        {
-            return Forbid();
-        }
-
         return Ok(ToResponse(match));
     }
 
@@ -71,11 +62,6 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
         string userId,
         CancellationToken cancellationToken)
     {
-        if (!TriviaAuth.IsWriter(User) && userId != TriviaAuth.UserId(User))
-        {
-            return Forbid();
-        }
-
         var history = await results.GetHistoryByUserIdAsync(userId, cancellationToken);
         return Ok(history.Select(ToResponse).ToList());
     }
@@ -85,11 +71,6 @@ public sealed class ResultsController(IResultRepository results) : ControllerBas
         string userId,
         CancellationToken cancellationToken)
     {
-        if (!TriviaAuth.IsWriter(User) && userId != TriviaAuth.UserId(User))
-        {
-            return Forbid();
-        }
-
         var stats = await results.GetStatsByUserIdAsync(userId, cancellationToken);
         return Ok(new PlayerStatsResponse
         {

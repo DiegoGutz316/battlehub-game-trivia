@@ -1,5 +1,5 @@
-// Cliente del modo práctica (hub anónimo /hubs/trivia/practice, un solo jugador, sin el Shell).
-// Traduce el protocolo de práctica a los mismos eventos del hub de partidas, para que GameModule
+// Cliente de las partidas de un solo jugador (hub /hubs/trivia/practice): modos práctica y playground.
+// Traduce ese protocolo a los mismos eventos del hub de partidas, para que GameModule
 // reutilice sus pantallas: pregunta, opciones, temporizador, revisión y resultado.
 import { HubConnectionBuilder, LogLevel, type HubConnection } from '@microsoft/signalr';
 import type { TriviaHubClient, HubConnectionState, HubEventHandler, Unsubscribe } from './trivia-hub-client';
@@ -62,15 +62,15 @@ export class PracticeTriviaClient implements TriviaHubClient {
   public async connect(): Promise<void> {
     this.update('connecting');
     try { await this.connection.start(); this.update('connected'); }
-    catch { this.update('disconnected'); throw new Error('No se pudo conectar con el modo práctica. Revisa que la API de Trivia esté encendida.'); }
+    catch { this.update('disconnected'); throw new Error('No se pudo conectar con Trivia. Revisa que la API esté encendida.'); }
   }
   public async disconnect(): Promise<void> { await this.connection.stop(); this.listeners.clear(); this.handlers.clear(); }
-  /** La primera vez empieza la práctica; después de una reconexión la recupera con su clave. */
+  /** La primera vez empieza la partida; después de una reconexión la recupera con su clave. */
   public async joinMatch(): Promise<void> {
     if (!this.session) {
       let started: PracticeStarted;
-      try { started = await this.connection.invoke<PracticeStarted>('StartPractice', this.player.displayName); }
-      catch { throw new Error('No se pudo iniciar la práctica. Reintenta en unos segundos.'); }
+      try { started = await this.connection.invoke<PracticeStarted>('StartPractice', this.player.displayName.slice(0, 50)); }
+      catch { throw new Error('No se pudo iniciar la partida. Reintenta en unos segundos.'); }
       this.session = { matchId: started.matchId, secret: started.secret };
       this.lastQuestion = started.firstQuestion;
       this.emit('CurrentState', {
@@ -93,7 +93,7 @@ export class PracticeTriviaClient implements TriviaHubClient {
     if (state.phase === 'finished') this.finish(state);
   }
   public async submitAnswer(request: SubmitAnswerRequest): Promise<void> {
-    if (!this.session) throw new Error('La práctica todavía no empezó.');
+    if (!this.session) throw new Error('La partida todavía no empezó.');
     const received = await this.connection.invoke<PracticeAnswer>(
       'SubmitPracticeAnswer', this.session.matchId, this.session.secret, request.questionId, request.answerId);
     this.lastAnswer = { questionId: received.questionId, answerId: received.selectedAnswerId };

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using BattleHub.Trivia.Api.Matchmaking;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Exceptions;
 using BattleHub.Trivia.Domain.Interfaces;

@@ -8,6 +8,7 @@ const ctx: GameContext = {
   matchId: 'match-001',
   gameType: 'trivia',
   currentUser: { id: 'user-001', displayName: 'Francisco' },
+  mode: 'playground',
 };
 
 describe('GameModule (contrato ADR-003)', () => {

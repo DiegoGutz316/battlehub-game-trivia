@@ -164,7 +164,7 @@ jobs:
 
           counts="$(query -d BattleHubTrivia -Q "SET NOCOUNT ON; SELECT CONCAT((SELECT COUNT(*) FROM __EFMigrationsHistory), ',', (SELECT COUNT(*) FROM Questions), ',', (SELECT COUNT(*) FROM AnswerOptions));" | tr -d '[:space:]')"
           echo "Migraciones, preguntas y opciones: $counts"
-          test "$counts" = "5,30,120"
+          test "$counts" = "6,30,120"
 
           docker image ls battlehub-trivia-api:ci --format "Imagen de la API: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"
           docker image ls battlehub-trivia-dbinit:ci --format "Imagen de DbInit: {{.Size}}" >> "$GITHUB_STEP_SUMMARY"

@@ -46,7 +46,7 @@ async function startedClient() {
 beforeEach(() => { jest.clearAllMocks(); mockServerEvents.clear(); });
 
 describe('PracticeTriviaClient', () => {
-  it('se conecta al hub anónimo de práctica, sin token y con reconexión automática', () => {
+  it('se conecta al hub de práctica, sin token y con reconexión automática', () => {
     new PracticeTriviaClient('http://localhost:5185', player);
 
     expect(mockBuilder.withUrl).toHaveBeenCalledWith('http://localhost:5185/hubs/trivia/practice');
@@ -76,11 +76,11 @@ describe('PracticeTriviaClient', () => {
     mockConnection.start.mockRejectedValueOnce(new Error('ECONNREFUSED'));
     const client = new PracticeTriviaClient('http://api', player);
 
-    await expect(client.connect()).rejects.toThrow('No se pudo conectar con el modo práctica');
+    await expect(client.connect()).rejects.toThrow('No se pudo conectar con Trivia');
     expect(client.connectionState).toBe('disconnected');
   });
 
-  it('joinMatch() empieza la práctica con el nombre del jugador y entrega la primera pregunta', async () => {
+  it('joinMatch() empieza la partida con el nombre del jugador y entrega la primera pregunta', async () => {
     const { events } = await startedClient();
 
     expect(mockConnection.invoke).toHaveBeenCalledWith('StartPractice', 'Jugador 1');
@@ -91,14 +91,23 @@ describe('PracticeTriviaClient', () => {
     } }]);
   });
 
-  it('si el servidor no puede empezar la práctica, lanza un error legible', async () => {
+  it('recorta el nombre al máximo que acepta el hub', async () => {
+    const client = new PracticeTriviaClient('http://api', { id: 'one', displayName: 'n'.repeat(80) });
+    mockConnection.invoke.mockResolvedValueOnce(started);
+
+    await client.joinMatch();
+
+    expect(mockConnection.invoke).toHaveBeenCalledWith('StartPractice', 'n'.repeat(50));
+  });
+
+  it('si el servidor no puede empezar la partida, lanza un error legible', async () => {
     const client = new PracticeTriviaClient('http://api', player);
     mockConnection.invoke.mockRejectedValueOnce(new Error('HubException: INSUFFICIENT_QUESTIONS'));
 
-    await expect(client.joinMatch()).rejects.toThrow('No se pudo iniciar la práctica');
+    await expect(client.joinMatch()).rejects.toThrow('No se pudo iniciar la partida');
   });
 
-  it('envía la respuesta con la clave de la práctica y la confirma como AnswerReceived', async () => {
+  it('envía la respuesta con la clave de la partida y la confirma como AnswerReceived', async () => {
     const { client, events } = await startedClient();
     mockConnection.invoke.mockResolvedValueOnce({ questionId: 'q1', selectedAnswerId: 'a', pointsEarned: 230, totalScore: 230, receivedAtUtc: now });
 
@@ -108,7 +117,7 @@ describe('PracticeTriviaClient', () => {
     expect(events.at(-1)).toEqual({ name: 'AnswerReceived', data: { questionId: 'q1', answerId: 'a', receivedAtUtc: now } });
   });
 
-  it('no envía respuestas antes de empezar la práctica', async () => {
+  it('no envía respuestas antes de empezar la partida', async () => {
     const client = new PracticeTriviaClient('http://api', player);
 
     await expect(client.submitAnswer({ matchId: 'm', questionId: 'q1', answerId: 'a' })).rejects.toThrow('todavía no empezó');
@@ -129,7 +138,7 @@ describe('PracticeTriviaClient', () => {
     ]);
   });
 
-  it('convierte el fin de la práctica en un resultado de un solo jugador', async () => {
+  it('convierte el fin de la partida en un resultado de un solo jugador', async () => {
     const { events } = await startedClient();
 
     server('GameFinished', { matchId: 'practice-1', totalQuestions: 10, totalScore: 1800, correctAnswers: 8 });
@@ -140,7 +149,7 @@ describe('PracticeTriviaClient', () => {
     }) });
   });
 
-  it('después de reconectar recupera la práctica con su clave, incluida la respuesta ya enviada', async () => {
+  it('después de reconectar recupera la partida con su clave, incluida la respuesta ya enviada', async () => {
     const { client, events } = await startedClient();
     mockConnection.invoke.mockResolvedValueOnce({ questionId: 'q1', selectedAnswerId: 'b', pointsEarned: 0, totalScore: 0, receivedAtUtc: now });
     await client.submitAnswer({ matchId: 'm', questionId: 'q1', answerId: 'b' });
@@ -172,7 +181,7 @@ describe('PracticeTriviaClient', () => {
     }) });
   });
 
-  it('al reconectar con la práctica terminada muestra el resultado', async () => {
+  it('al reconectar con la partida terminada muestra el resultado', async () => {
     const { client, events } = await startedClient();
     mockConnection.invoke.mockResolvedValueOnce({
       matchId: 'practice-1', phase: 'finished', questionNumber: 10, totalQuestions: 10, totalScore: 2000, correctAnswers: 9,

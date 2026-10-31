@@ -1,7 +1,7 @@
 ﻿import { customElement } from 'aurelia';
 import template from './game-module.html';
 import './game-module.css';
-import type { GameContext, GameModule as IGameModule } from './contracts/game-contracts';
+import { GAME_FINISHED_EVENT, type GameContext, type GameFinishedDetail, type GameMode, type GameModule as IGameModule } from './contracts/game-contracts';
 import type { TriviaHubClient, Unsubscribe } from './services/trivia-hub/trivia-hub-client';
 import { SignalRTriviaClient } from './services/trivia-hub/signalr-trivia-client';
 import { PracticeTriviaClient } from './services/trivia-hub/practice-trivia-client';
@@ -28,10 +28,9 @@ export class GameModule implements IGameModule {
   public seconds = 0;
   public connection = 'disconnected';
   public error = '';
-  /** Abierto sin el Shell (sin tokens): ofrece el modo práctica en lugar de una partida real. */
-  public preview = false;
-  /** Partida de práctica en curso: un solo jugador, no se guarda en el historial. */
-  public practice = false;
+  public mode: GameMode = 'match';
+  /** Partida de un solo jugador en curso (práctica o playground): no se guarda en el historial. */
+  public solo = false;
   public connecting = false;
   public loadingHistory = false;
   public history: HistoryItem[] = [];
@@ -45,23 +44,22 @@ export class GameModule implements IGameModule {
 
   public async initialize(context: GameContext): Promise<void> {
     if (this.state === 'disposed') throw new Error('El juego ya fue liberado con dispose()');
-    if (!context?.matchId || context.gameType !== 'trivia' || !context.currentUser?.id)
+    const mode = context?.mode ?? 'match';
+    if (context?.gameType !== 'trivia' || !context.currentUser?.id || (mode === 'match' && !context.matchId))
       throw new Error('Contexto inválido: falta matchId, gameType trivia o currentUser');
     if (this.state !== 'created') throw new Error('El juego ya fue inicializado');
-    if (Boolean(context.getAccessToken) !== Boolean(context.getMatchmakingAccessToken))
-      throw new Error('El Shell debe entregar autorización de Trivia y de Matchmaking.');
+    if (mode === 'match' && !context.participants?.some(player => player.userId === context.currentUser.id))
+      throw new Error('El Shell debe entregar los jugadores de la sala.');
     this.context = context;
-    this.preview = !context.getAccessToken;
+    this.mode = mode;
     this.state = 'initialized';
   }
+  public get soloTitle(): string { return this.mode === 'practice' ? 'Modo práctica' : 'Modo playground'; }
   private live(): boolean { return this.state !== 'disposed'; }
   private async join(): Promise<void> {
     const context = this.context;
     if (!context || !this.live()) return;
-    if (this.practice) { await this.client!.joinMatch({ matchId: context.matchId }); this.joined = true; return; }
-    const token = await context.getMatchmakingAccessToken!();
-    if (!this.live()) return;
-    await this.client!.joinMatch({ matchId: context.matchId, matchmakingAccessToken: token });
+    await this.client!.joinMatch({ matchId: context.matchId, userId: context.currentUser.id, participants: context.participants ?? [] });
     this.joined = true;
   }
   private subscribe(client: TriviaHubClient): void {
@@ -88,17 +86,23 @@ export class GameModule implements IGameModule {
       client.on('PlayerJoined', data => { this.markConnected(data.userId, true); }),
       client.on('PlayerReconnected', data => { this.markConnected(data.userId, true); }),
       client.on('PlayerDisconnected', data => { this.markConnected(data.userId, false); }),
-      client.on('GameFinished', data => { this.phase = 'finished'; this.result = data; }),
+      client.on('GameFinished', data => { this.phase = 'finished'; this.result = data; this.notifyFinished(); }),
       client.on('GameError', data => { this.error = data.message; }),
       client.onConnectionStateChanged(state => {
         this.connection = state;
         if (state === 'connected' && this.joined && this.live()) void this.join().catch(() => {
-          if (this.live()) this.error = this.practice
-            ? 'No se pudo recuperar la práctica. Empieza una nueva.'
+          if (this.live()) this.error = this.solo
+            ? 'No se pudo recuperar la partida. Empieza una nueva.'
             : 'No se pudo recuperar la partida. Reabre el juego desde Salas.';
         });
       }),
     ];
+  }
+  // R-46: el juego solo avisa al Shell; es el Shell quien notifica a Matchmaking. Sin sala no hay nada que avisar.
+  private notifyFinished(): void {
+    if (this.mode !== 'match' || !this.context) return;
+    const detail: GameFinishedDetail = { matchId: this.context.matchId, gameType: this.context.gameType };
+    window.dispatchEvent(new CustomEvent(GAME_FINISHED_EVENT, { detail }));
   }
   private markConnected(id: string, connected: boolean): void {
     this.players = this.players.map(player => player.userId === id ? { ...player, isConnected: connected } : player);
@@ -110,22 +114,23 @@ export class GameModule implements IGameModule {
     if (!this.live()) throw new Error('El juego ya fue liberado con dispose()');
     if (!this.context) throw new Error('Falta llamar a initialize()');
     if (this.connecting) return;
-    if (this.preview) { this.state = 'running'; return; }
     if (this.client) { this.state = 'running'; return; }
-    await this.connect(new SignalRTriviaClient(apiUrl, this.context.getAccessToken!));
+    if (this.mode === 'match') { await this.connect(new SignalRTriviaClient(apiUrl)); return; }
+    this.state = 'running';
+    if (this.mode === 'practice') await this.playSolo();
   }
-  /** Sin el Shell: juega una partida de práctica de un solo jugador con las mismas pantallas. */
-  public async startPractice(): Promise<void> {
-    if (!this.preview || !this.context || this.connecting || (this.state !== 'initialized' && this.state !== 'running')) return;
+  /** Modos práctica y playground: una partida de un solo jugador con las mismas pantallas. */
+  public async playSolo(): Promise<void> {
+    if (this.mode === 'match' || !this.context || this.connecting || (this.state !== 'initialized' && this.state !== 'running')) return;
     await this.leave();
     this.phase = 'waiting'; this.players = []; this.question = null; this.review = null; this.result = null;
     this.selectedAnswerId = null; this.answered = false; this.submitting = false; this.seconds = 0; this.error = '';
-    this.connection = 'disconnected'; this.practice = true;
+    this.connection = 'disconnected'; this.solo = true;
     try { await this.connect(new PracticeTriviaClient(apiUrl, this.context.currentUser)); }
     catch (error) {
       if (!this.live()) return;
-      this.practice = false;
-      this.error = error instanceof Error ? error.message : 'No se pudo iniciar la práctica.';
+      this.solo = false;
+      this.error = error instanceof Error ? error.message : 'No se pudo iniciar la partida.';
     }
   }
   private async leave(): Promise<void> {
@@ -159,15 +164,11 @@ export class GameModule implements IGameModule {
   }
   public async loadHistory(): Promise<void> {
     const context = this.context;
-    if (!context?.getAccessToken || this.loadingHistory || !this.live()) return;
+    if (!context || this.mode !== 'match' || this.loadingHistory || !this.live()) return;
     this.loadingHistory = true; this.error = '';
     try {
-      const token = await context.getAccessToken();
-      if (!this.live()) return;
       const base = `${apiUrl}/api/games/trivia/players/${encodeURIComponent(context.currentUser.id)}`;
-      const responses = await Promise.all(['history', 'stats'].map(path => fetch(`${base}/${path}`, {
-        headers: { Authorization: `Bearer ${token}` }, signal: this.abort.signal,
-      })));
+      const responses = await Promise.all(['history', 'stats'].map(path => fetch(`${base}/${path}`, { signal: this.abort.signal })));
       if (responses.some(response => !response.ok)) throw new Error('No se pudo cargar tu historial.');
       const [history, statistics] = await Promise.all(responses.map(response => response.json()));
       if (this.live()) { this.history = history; this.statistics = statistics; }
