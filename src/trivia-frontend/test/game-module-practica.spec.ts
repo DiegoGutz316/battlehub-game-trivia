@@ -1,8 +1,8 @@
-// Modo playground: el juego abierto sin el Shell ofrece una partida de un solo jugador con las mismas pantallas.
+// Partidas de un solo jugador con las mismas pantallas: modo playground (sin el Shell) y modo práctica (desde el Shell, sin sala).
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
 import { GameModule } from '../src/game-module';
-import type { GameContext } from '../src/contracts/game-contracts';
+import { GAME_FINISHED_EVENT, type GameContext } from '../src/contracts/game-contracts';
 import type { Question, TriviaHubEventMap, TriviaHubEventName } from '../src/services/trivia-hub/contract';
 import { PracticeTriviaClient } from '../src/services/trivia-hub/practice-trivia-client';
 import { SignalRTriviaClient } from '../src/services/trivia-hub/signalr-trivia-client';
@@ -38,7 +38,8 @@ jest.mock('../src/services/trivia-hub/practice-trivia-client', () => ({ Practice
 jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn() }));
 
 const withoutShell: GameContext = { matchId: 'match-dev-001', gameType: 'trivia', currentUser: { id: 'user-dev-1', displayName: 'Jugador 1' }, mode: 'playground' };
-const fromShell: GameContext = { ...withoutShell, mode: undefined, getAccessToken: jest.fn(async () => 'token'), getMatchmakingAccessToken: jest.fn(async () => 'token') };
+const fromRoom: GameContext = { matchId: 'sala', gameType: 'trivia', currentUser: withoutShell.currentUser, participants: [{ userId: 'user-dev-1', displayName: 'Jugador 1' }] };
+const practice: GameContext = { matchId: '', gameType: 'trivia', currentUser: withoutShell.currentUser, mode: 'practice' };
 const now = (): string => new Date().toISOString();
 const question: Question = {
   questionId: 'q1', questionNumber: 1, totalQuestions: 10, text: '¿Qué lenguaje usa Aurelia?', category: 'Tecnología',
@@ -86,7 +87,7 @@ describe('modo playground (sin el Shell)', () => {
 
       expect(PracticeTriviaClient).toHaveBeenCalledWith('http://localhost:5185', withoutShell.currentUser);
       expect(SignalRTriviaClient).not.toHaveBeenCalled();
-      expect(latest().joinMatch).toHaveBeenCalledWith({ matchId: 'match-dev-001' });
+      expect(latest().joinMatch).toHaveBeenCalledWith({ matchId: 'match-dev-001', userId: 'user-dev-1', participants: [] });
       expect(game.solo).toBe(true);
       expect(game.state).toBe('running');
       expect(fixture.appHost.querySelector('[data-testid="solo-badge"]')?.textContent).toContain('no se guarda en tu historial');
@@ -169,7 +170,7 @@ describe('modo playground (sin el Shell)', () => {
     await game.dispose();
   });
 
-  it('al reconectar recupera la partida sin pedir tokens al Shell', async () => {
+  it('al reconectar recupera la partida', async () => {
     const game = new GameModule();
     await game.initialize(withoutShell);
     await game.playSolo();
@@ -201,8 +202,8 @@ describe('modo playground (sin el Shell)', () => {
     } finally { await game.dispose(); await fixture.stop(true); }
   });
 
-  it('no se ofrece cuando el juego se abre desde el Shell', async () => {
-    const { game, text, fixture } = await render(fromShell);
+  it('no se ofrece en una partida de una sala', async () => {
+    const { game, text, fixture } = await render(fromRoom);
     try {
       await game.playSolo();
 
@@ -220,5 +221,65 @@ describe('modo playground (sin el Shell)', () => {
     await game.playSolo();
 
     expect(PracticeTriviaClient).not.toHaveBeenCalled();
+  });
+
+  it('no avisa al Shell cuando termina: no hay sala que cerrar', async () => {
+    const finishedEvent = jest.fn();
+    window.addEventListener(GAME_FINISHED_EVENT, finishedEvent);
+    const game = new GameModule();
+    await game.initialize(withoutShell);
+    await game.playSolo();
+
+    emit('GameFinished', finished(500, 3));
+
+    expect(finishedEvent).not.toHaveBeenCalled();
+    window.removeEventListener(GAME_FINISHED_EVENT, finishedEvent);
+    await game.dispose();
+  });
+});
+
+describe('modo práctica (desde el Shell, sin sala)', () => {
+  it('start() empieza solo, sin matchId ni jugadores, y lo indica en pantalla', async () => {
+    const { game, fixture } = await render(practice);
+    try {
+      await game.start();
+      await tasksSettled();
+
+      expect(PracticeTriviaClient).toHaveBeenCalledWith('http://localhost:5185', practice.currentUser);
+      expect(SignalRTriviaClient).not.toHaveBeenCalled();
+      expect(latest().joinMatch).toHaveBeenCalledTimes(1);
+      expect(game.solo).toBe(true);
+      expect(game.state).toBe('running');
+      expect(fixture.appHost.querySelector('[data-testid="solo-badge"]')?.textContent).toContain('Modo práctica');
+      expect(fixture.appHost.querySelector('[data-testid="solo-offer"]')).toBeNull();
+    } finally { await game.dispose(); await fixture.stop(true); }
+  });
+
+  it('si la API no responde, muestra el error y permite reintentar', async () => {
+    failNextClient(client => client.connect.mockRejectedValueOnce(new Error('No se pudo conectar con Trivia.')));
+    const { game, text, button, fixture } = await render(practice);
+    try {
+      await game.start();
+
+      expect(await text()).toContain('No se pudo conectar con Trivia.');
+      (await button('Jugar en modo práctica'))!.click();
+      await tasksSettled();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(game.solo).toBe(true);
+      expect(game.error).toBe('');
+    } finally { await game.dispose(); await fixture.stop(true); }
+  });
+
+  it('al reanudar después de pausar no empieza otra partida', async () => {
+    const game = new GameModule();
+    await game.initialize(practice);
+    await game.start();
+    await game.pause();
+
+    await game.start();
+
+    expect(game.state).toBe('running');
+    expect(mockClients).toHaveLength(1);
+    await game.dispose();
   });
 });

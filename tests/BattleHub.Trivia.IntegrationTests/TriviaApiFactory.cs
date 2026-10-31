@@ -1,26 +1,14 @@
 
-using System.IdentityModel.Tokens.Jwt;
-using System.Net.Http.Headers;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using BattleHub.Trivia.Api.Matchmaking;
-using BattleHub.Trivia.Api.Profiles;
 using BattleHub.Trivia.Data.Context;
 using BattleHub.Trivia.Data.Seed;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.IdentityModel.Protocols;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
-using Microsoft.IdentityModel.Tokens;
-using NSubstitute;
 using Testcontainers.MsSql;
 
 namespace BattleHub.Trivia.IntegrationTests;
@@ -40,127 +28,11 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
                 TimeSpan.FromSeconds(seconds).Ticks);
     }
 
-    private static IMatchmakingGateway CreateRooms()
-    {
-        var rooms = Substitute.For<IMatchmakingGateway>();
-
-        rooms
-            .ValidateAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var id = call.ArgAt<string>(0);
-                var user = call.ArgAt<string>(1);
-                var token = call.ArgAt<string>(2);
-
-                if (token != "room-token" ||
-                    user is not ("player-one" or "player-two"))
-                {
-                    throw new HubException("PLAYER_NOT_IN_MATCH");
-                }
-
-                return Task.FromResult(new MatchRoom(
-                    id,
-                    "trivia",
-                    "Started",
-                    [
-                        new("player-one", "Uno"),
-                        new("player-two", "Dos")
-                    ]
-                ));
-            });
-
-        rooms
-            .FinishAsync(
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(FinishOutcome.Confirmed));
-
-        return rooms;
-    }
-
-    // Profile: todos tienen games.trivia.play salvo NoPermissionUser.
-    private static IProfileGateway CreateProfiles()
-    {
-        var profiles = Substitute.For<IProfileGateway>();
-
-        profiles
-            .CanPlayAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(call => Task.FromResult(
-                new JwtSecurityTokenHandler()
-                    .ReadJwtToken(call.ArgAt<string>(0))
-                    .Subject != NoPermissionUser));
-
-        return profiles;
-    }
-
     public TestClock Clock { get; } = new();
-
-    public const string NoPermissionUser = "player-without-permission";
-
-    // Emisor y audiencia acordados con Shell (los mismos de appsettings.json).
-    public const string Issuer = "https://dev-jaii1peslxnejq0y.us.auth0.com/";
-    public const string Audience = "https://api.battlehub.local/profile";
-
-    private readonly RSA rsa = RSA.Create(2048);
 
     private MsSqlContainer? sql;
     private string? connectionString;
     private bool local;
-
-    public string Token(
-        string subject = "test-service@clients",
-        string audience = Audience,
-        string issuer = Issuer,
-        bool writer = true,
-        DateTime? expires = null)
-    {
-        var claims = new List<Claim>
-        {
-            new("sub", subject)
-        };
-
-        if (subject.EndsWith("@clients"))
-        {
-            claims.Add(new("gty", "client-credentials"));
-        }
-
-        if (writer)
-        {
-            claims.Add(new("scope", "games.trivia.results.write"));
-        }
-
-        return new JwtSecurityTokenHandler().WriteToken(
-            new JwtSecurityToken(
-                issuer,
-                audience,
-                claims,
-                DateTime.UtcNow.AddHours(-2),
-                expires ?? DateTime.UtcNow.AddHours(1),
-                new SigningCredentials(
-                    new RsaSecurityKey(rsa)
-                    {
-                        KeyId = "test-rsa"
-                    },
-                    SecurityAlgorithms.RsaSha256)
-            )
-        );
-    }
-
-    public new HttpClient CreateClient()
-    {
-        var client = base.CreateClient();
-
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                Token());
-
-        return client;
-    }
 
     public async Task InitializeAsync()
     {
@@ -228,8 +100,6 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
         {
             await sql.DisposeAsync();
         }
-
-        rsa.Dispose();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -243,14 +113,6 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Clock);
 
-            services.RemoveAll<IMatchmakingGateway>();
-            services.AddSingleton<IMatchmakingGateway>(
-                CreateRooms());
-
-            services.RemoveAll<IProfileGateway>();
-            services.AddSingleton<IProfileGateway>(
-                CreateProfiles());
-
             services.RemoveAll<DbContextOptions<TriviaDbContext>>();
             services.RemoveAll<TriviaDbContext>();
 
@@ -258,27 +120,6 @@ public sealed class TriviaApiFactory : WebApplicationFactory<Program>, IAsyncLif
                 options => TriviaDbContext.ConfigureSqlServer(
                     options,
                     connectionString!));
-
-            services.PostConfigure<JwtBearerOptions>(
-                JwtBearerDefaults.AuthenticationScheme,
-                jwt =>
-                {
-                    // Reemplaza la descarga de claves del emisor por la clave de prueba, sin red.
-                    var configuration = new OpenIdConnectConfiguration
-                    {
-                        Issuer = Issuer
-                    };
-
-                    configuration.SigningKeys.Add(
-                        new RsaSecurityKey(rsa.ExportParameters(false))
-                        {
-                            KeyId = "test-rsa"
-                        });
-
-                    jwt.ConfigurationManager =
-                        new StaticConfigurationManager<OpenIdConnectConfiguration>(
-                            configuration);
-                });
         });
     }
 }

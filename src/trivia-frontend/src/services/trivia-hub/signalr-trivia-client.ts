@@ -7,8 +7,8 @@ export class SignalRTriviaClient implements TriviaHubClient {
   private readonly listeners = new Set<(state: HubConnectionState) => void>();
   public connectionState: HubConnectionState = 'disconnected';
 
-  public constructor(url: string, token: () => Promise<string>) {
-    this.connection = new HubConnectionBuilder().withUrl(`${url}/hubs/trivia`, { accessTokenFactory: token })
+  public constructor(url: string) {
+    this.connection = new HubConnectionBuilder().withUrl(`${url}/hubs/trivia`)
       .withAutomaticReconnect([0, 2000, 5000, 10000]).configureLogging(LogLevel.None).build();
     this.connection.onreconnecting(() => this.update('reconnecting'));
     this.connection.onreconnected(() => this.update('connected'));
@@ -21,7 +21,7 @@ export class SignalRTriviaClient implements TriviaHubClient {
   public async connect(): Promise<void> {
     this.update('connecting');
     try { await this.connection.start(); this.update('connected'); }
-    catch { this.update('disconnected'); throw new Error('No se pudo conectar con Trivia. Revisa el backend y la autorización.'); }
+    catch { this.update('disconnected'); throw new Error('No se pudo conectar con Trivia. Revisa que la API esté encendida.'); }
   }
   public async disconnect(): Promise<void> { await this.connection.stop(); this.listeners.clear(); }
   public async joinMatch(request: JoinMatchRequest): Promise<void> { await this.connection.invoke('JoinMatch', request); }

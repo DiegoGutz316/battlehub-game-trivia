@@ -6,7 +6,7 @@ Microservicio del juego **Trivia Battle** (Equipo 5) del proyecto BattleHub.
 
 ## Entrega de integración local
 
-La implementación local del Shell y el juego se explica en [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md). Incluye partidas SignalR, resultado persistido y cola M2M. Revisar esa guía antes de los comandos históricos de este README; no implica publicación ni aprobación de extensiones del contrato central.
+Trivia no tiene contacto con Auth0, Profile ni Matchmaking: solo se comunica con el Shell. Lo que el Shell debe entregar y escuchar está en [Integración con el Shell](docs/integracion-shell.md).
 
 Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://github.com/javiercoulon-public/battlehub-contracts).
 
@@ -93,19 +93,12 @@ Problemas frecuentes:
 | Compose pide `MSSQL_SA_PASSWORD` | Falta `.env` o la variable está vacía. |
 | Login de SQL falla | La contraseña de `ConnectionStrings__Trivia` debe ser la misma que `MSSQL_SA_PASSWORD`. |
 | El frontend no habla con la API | `TRIVIA_API_URL` debe ser la URL del **navegador** (`http://localhost:5185`), no el nombre del servicio Docker. Hay que reconstruir el frontend si se cambia. |
-| Matchmaking no recibe el fin de partida | Completar `Matchmaking__ClientSecret` en `.env`. |
 
 ## Cómo correr localmente (sin Compose)
 
 ### Backend (.NET 10)
 
 Requisito: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
-
-La API acepta el token de la sesión del Shell (ver [Integración con Shell y Matchmaking](docs/integracion-shell-matchmaking.md#autenticación-de-trivia)). Para avisar el fin de partida a Matchmaking:
-
-```bash
-dotnet user-secrets set "Matchmaking:ClientSecret" "<secreto del cliente de servicio de Trivia>" --project src/BattleHub.Trivia.Api
-```
 
 Preparar esquema y datos, luego arrancar la API (LocalDB por defecto si no hay cadena de conexión):
 
@@ -136,7 +129,7 @@ docker build --file src/BattleHub.Trivia.DbInit/Dockerfile --tag battlehub-trivi
 docker run --rm -p 5185:8080 --env-file .env battlehub-trivia-api
 ```
 
-El job `backend-docker` del CI construye API y DbInit, aplica `migrate` + `seed` (y repite `seed` para comprobar que no hay duplicados), levanta la API y verifica 5 migraciones, 30 preguntas y 120 opciones.
+El job `backend-docker` del CI construye API y DbInit, aplica `migrate` + `seed` (y repite `seed` para comprobar que no hay duplicados), levanta la API y verifica 6 migraciones, 30 preguntas y 120 opciones.
 
 ### Frontend (Aurelia)
 
@@ -186,7 +179,7 @@ http://localhost:4002/
 http://localhost:4002/?displayName=Jugador%202   (otro nombre para el jugador)
 ```
 
-Cuando el juego se abre desde el Shell, el modo playground no aparece y todo funciona como una partida normal.
+El modo práctica es distinto: lo abre el Shell, sin sala, para un usuario con acceso al juego. Ver [Modos de juego](docs/integracion-shell.md#modos-de-juego).
 
 #### Integración con el Shell (Module Federation, ADR-003)
 
@@ -246,15 +239,12 @@ npx jest
 
 Ningún valor sensible (contraseñas, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles.
 
-| Clave en `appsettings.json`                                                 | Variable de entorno                                                  | ¿Sensible?                          | Dónde va                                                                                                                                                                                                      |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ConnectionStrings:Trivia`                                                  | `ConnectionStrings__Trivia`                                          | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                                                                                                               |
-| `Matchmaking:ClientSecret`                                                  | `Matchmaking__ClientSecret`                                          | **Sí**                              | Local: user-secrets. Docker o servidor: variable de entorno                                                                                                                                                   |
-| `Auth:Issuer`, `Auth:Audience`                                              | `Auth__Issuer`, `Auth__Audience`                                     | No                                  | `appsettings.json`: emisor y audiencia del token de sesión del Shell, acordados con Shell                                                                                                                     |
-| `Matchmaking:TokenEndpoint`, `Matchmaking:Audience`, `Matchmaking:ClientId` | `Matchmaking__TokenEndpoint`, etc.                                   | No: identificadores públicos        | `appsettings.json`: cliente de servicio de Trivia para avisar el fin de partida                                                                                                                               |
-| `Matchmaking:BaseUrl`, `Profile:BaseUrl`, `Cors:Origins`                    | `Matchmaking__BaseUrl`, `Profile__BaseUrl`, `Cors__Origins__0`, etc. | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                                                                                                                   |
-| `MSSQL_SA_PASSWORD`                                                         | `MSSQL_SA_PASSWORD`                                                  | **Sí**                              | Solo en `.env` para Docker Compose                                                                                                                                                                            |
-| `TRIVIA_API_URL` (frontend)                                                 | `TRIVIA_API_URL`                                                     | No                                  | Build-arg del frontend / variable antes de `npm start` o `npm run build`. En Compose: URL del navegador hacia la API                                                                                          |
+| Clave en `appsettings.json` | Variable de entorno                    | ¿Sensible?                          | Dónde va                                                                                                             |
+| --------------------------- | -------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionStrings:Trivia`  | `ConnectionStrings__Trivia`            | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                      |
+| `Cors:Origins`              | `Cors__Origins__0`, `Cors__Origins__1` | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                          |
+| `MSSQL_SA_PASSWORD`         | `MSSQL_SA_PASSWORD`                    | **Sí**                              | Solo en `.env` para Docker Compose                                                                                   |
+| `TRIVIA_API_URL` (frontend) | `TRIVIA_API_URL`                       | No                                  | Build-arg del frontend / variable antes de `npm start` o `npm run build`. En Compose: URL del navegador hacia la API |
 
 **En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno _Development_:
 

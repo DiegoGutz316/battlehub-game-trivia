@@ -1,11 +1,9 @@
-using System.Security.Claims;
 using System.Text.Json;
 using BattleHub.Trivia.Api.Controllers;
 using BattleHub.Trivia.Api.Dtos;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Exceptions;
 using BattleHub.Trivia.Domain.Interfaces;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -39,7 +37,7 @@ public sealed class ResultsControllerTests
         string caso,
         string expectedMessage)
     {
-        var controller = CreateController(CreateWriter());
+        var controller = CreateController();
 
         var result = await controller.Create(InvalidRequest(caso), CancellationToken.None);
 
@@ -56,7 +54,7 @@ public sealed class ResultsControllerTests
         _repository
             .SaveAsync(Arg.Do<MatchResult>(match => saved = match), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
-        var controller = CreateController(CreateWriter());
+        var controller = CreateController();
 
         var result = await controller.Create(
             CreateRequest(
@@ -92,7 +90,7 @@ public sealed class ResultsControllerTests
         _repository
             .SaveAsync(Arg.Do<MatchResult>(match => saved = match), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
-        var controller = CreateController(CreateWriter());
+        var controller = CreateController();
         var request = new SaveMatchResultRequest
         {
             MatchId = "match-empate",
@@ -128,7 +126,7 @@ public sealed class ResultsControllerTests
     [InlineData("  TRIVIA  ")]
     public async Task Create_GameTypeVacioOEnMayusculas_LoGuardaComoTrivia(string? gameType)
     {
-        var controller = CreateController(CreateWriter());
+        var controller = CreateController();
 
         var result = await controller.Create(
             CreateRequest(gameType: gameType),
@@ -146,7 +144,7 @@ public sealed class ResultsControllerTests
         _repository
             .SaveAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new MatchAlreadyExistsException("match-001"));
-        var controller = CreateController(CreateWriter());
+        var controller = CreateController();
 
         var result = await controller.Create(CreateRequest(), CancellationToken.None);
 
@@ -168,7 +166,7 @@ public sealed class ResultsControllerTests
         _repository
             .SaveAsync(Arg.Do<MatchResult>(match => saved = match), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
-        var controller = CreateController(CreateWriter());
+        var controller = CreateController();
 
         var result = await controller.Create(
             CreateRequest(metadata: ParseJson(metadataJson)),
@@ -188,7 +186,7 @@ public sealed class ResultsControllerTests
         _repository
             .GetByMatchIdAsync("match-404", Arg.Any<CancellationToken>())
             .Returns((MatchResult?)null);
-        var controller = CreateController(CreatePlayerUser("user-1"));
+        var controller = CreateController();
 
         var result = await controller.GetByMatchId("match-404", CancellationToken.None);
 
@@ -198,25 +196,12 @@ public sealed class ResultsControllerTests
     }
 
     [Fact]
-    public async Task GetByMatchId_JugadorAjeno_DevuelveForbid()
+    public async Task GetByMatchId_PartidaExistente_DevuelveOk()
     {
         _repository
             .GetByMatchIdAsync("match-001", Arg.Any<CancellationToken>())
             .Returns(CreateStoredMatch());
-        var controller = CreateController(CreatePlayerUser("user-99"));
-
-        var result = await controller.GetByMatchId("match-001", CancellationToken.None);
-
-        Assert.IsType<ForbidResult>(result.Result);
-    }
-
-    [Fact]
-    public async Task GetByMatchId_JugadorDeLaPartida_DevuelveOk()
-    {
-        _repository
-            .GetByMatchIdAsync("match-001", Arg.Any<CancellationToken>())
-            .Returns(CreateStoredMatch());
-        var controller = CreateController(CreatePlayerUser("user-2"));
+        var controller = CreateController();
 
         var result = await controller.GetByMatchId("match-001", CancellationToken.None);
 
@@ -227,33 +212,7 @@ public sealed class ResultsControllerTests
     }
 
     [Fact]
-    public async Task GetByMatchId_ServicioEscritor_DevuelveOkAunqueNoJuegue()
-    {
-        _repository
-            .GetByMatchIdAsync("match-001", Arg.Any<CancellationToken>())
-            .Returns(CreateStoredMatch());
-        var controller = CreateController(CreateWriter());
-
-        var result = await controller.GetByMatchId("match-001", CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.Equal("match-001", Assert.IsType<MatchResultResponse>(ok.Value).MatchId);
-    }
-
-    [Fact]
-    public async Task GetStats_OtroJugador_DevuelveForbidYNoConsulta()
-    {
-        var controller = CreateController(CreatePlayerUser("user-1"));
-
-        var result = await controller.GetStats("user-2", CancellationToken.None);
-
-        Assert.IsType<ForbidResult>(result.Result);
-        await _repository.DidNotReceive()
-            .GetStatsByUserIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task GetStats_ServicioEscritor_DevuelveLasEstadisticasDelJugador()
+    public async Task GetStats_DevuelveLasEstadisticasDelJugador()
     {
         _repository
             .GetStatsByUserIdAsync("user-2", Arg.Any<CancellationToken>())
@@ -265,7 +224,7 @@ public sealed class ResultsControllerTests
                 AverageScore = 350.5,
                 BestScore = 720
             });
-        var controller = CreateController(CreateWriter());
+        var controller = CreateController();
 
         var result = await controller.GetStats("user-2", CancellationToken.None);
 
@@ -278,25 +237,7 @@ public sealed class ResultsControllerTests
         Assert.Equal(720, stats.BestScore);
     }
 
-    private ResultsController CreateController(ClaimsPrincipal user) => new(_repository)
-    {
-        ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext { User = user }
-        }
-    };
-
-    private static ClaimsPrincipal CreatePlayerUser(string userId) =>
-        new(new ClaimsIdentity([new Claim("sub", userId)], "TestAuth"));
-
-    private static ClaimsPrincipal CreateWriter() =>
-        new(new ClaimsIdentity(
-            [
-                new Claim("sub", "matchmaking@clients"),
-                new Claim("gty", "client-credentials"),
-                new Claim("scope", "games.trivia.results.write")
-            ],
-            "TestAuth"));
+    private ResultsController CreateController() => new(_repository);
 
     private static SaveMatchResultRequest InvalidRequest(string caso) => caso switch
     {

@@ -1,18 +1,19 @@
 # Migraciones de la base de datos
 
-La base de datos de Trivia Battle tiene **5 tablas** y **5 migraciones** de Entity Framework Core, una por tabla. Están en `src/BattleHub.Trivia.Data/Migrations/` y el modelo se define en `src/BattleHub.Trivia.Data/Context/TriviaDbContext.cs`.
+La base de datos de Trivia Battle tiene **4 tablas** y **6 migraciones** de Entity Framework Core: una por cada tabla, más la que creó y la que eliminó `FinishNotifications`. Están en `src/BattleHub.Trivia.Data/Migrations/` y el modelo se define en `src/BattleHub.Trivia.Data/Context/TriviaDbContext.cs`.
 
 - Todas las llaves primarias son una columna `Id` de tipo Guid (`uniqueidentifier`).
 - Los identificadores de texto que usa el resto del sistema (`QuestionId`, `AnswerId`, `MatchId` y `UserId`) **no son llaves primarias**: son columnas comunes con índices únicos.
 - Las llaves foráneas apuntan siempre al `Id` de la tabla padre.
 
-| Orden | Migración | Tabla que crea |
+| Orden | Migración | Tabla |
 |---|---|---|
 | 1 | `20261018211140_CrearTablaQuestions` | `Questions` |
 | 2 | `20261018211355_CrearTablaAnswerOptions` | `AnswerOptions` |
 | 3 | `20261018211612_CrearTablaMatchResults` | `MatchResults` |
 | 4 | `20261018211842_CrearTablaPlayerResults` | `PlayerResults` |
-| 5 | `20261018212042_CrearTablaFinishNotifications` | `FinishNotifications` |
+| 5 | `20261018212042_CrearTablaFinishNotifications` | `FinishNotifications` (ya no existe) |
+| 6 | `20261031073116_EliminarTablaFinishNotifications` | Elimina `FinishNotifications` |
 
 ## Relaciones
 
@@ -20,14 +21,12 @@ La base de datos de Trivia Battle tiene **5 tablas** y **5 migraciones** de Enti
 Questions    1 ──── N  AnswerOptions        (AnswerOptions.QuestionRefId → Questions.Id)
 
 MatchResults 1 ──── N  PlayerResults        (PlayerResults.MatchRefId → MatchResults.Id)
-     │
-     └────── 1 ──── 1  FinishNotifications  (FinishNotifications.MatchRefId → MatchResults.Id)
 ```
 
-Las tres llaves foráneas tienen borrado en cascada:
+Las dos llaves foráneas tienen borrado en cascada:
 
 - si se borra una pregunta, se borran sus opciones;
-- si se borra el resultado de una partida, se borran sus jugadores y su notificación de fin.
+- si se borra el resultado de una partida, se borran sus jugadores.
 
 ## 1. CrearTablaQuestions
 
@@ -116,7 +115,7 @@ Crea la tabla **`PlayerResults`**, con el resultado de cada jugador en una parti
 
 ## 5. CrearTablaFinishNotifications
 
-Crea la tabla **`FinishNotifications`**, la cola de avisos de fin de partida que se envían a Matchmaking.
+Creó la tabla **`FinishNotifications`**, la cola de avisos de fin de partida que la API enviaba a Matchmaking. La migración 6 la elimina.
 
 | Columna | Tipo SQL | Admite nulos |
 |---|---|---|
@@ -136,6 +135,10 @@ Crea la tabla **`FinishNotifications`**, la cola de avisos de fin de partida que
   - `IX_FinishNotifications_Delivered_NextAttemptAt` sobre `(Delivered, NextAttemptAt)`, no único. Lo usa el proceso que busca avisos pendientes.
 - **Restricciones:** ninguna adicional.
 
+## 6. EliminarTablaFinishNotifications
+
+Elimina la tabla **`FinishNotifications`** con sus índices y su llave foránea. Con el requisito R-46, el juego ya no llama a Matchmaking: avisa el fin de partida al Shell, y es el Shell quien notifica a Matchmaking. La cola ya no tiene uso. Los resultados no se tocan.
+
 ## Por qué algunos índices únicos son compuestos
 
 `AnswerId` y `UserId` no son únicos por sí solos:
@@ -143,7 +146,7 @@ Crea la tabla **`FinishNotifications`**, la cola de avisos de fin de partida que
 - **`AnswerId`:** varias preguntas usan los mismos identificadores de opción (`a`, `b`, `c`, `d`). Un índice único solo sobre `AnswerId` impediría guardar la opción `a` de una segunda pregunta. Lo que no puede repetirse es la **combinación** `(QuestionId, AnswerId)`: una pregunta no puede tener dos opciones con el mismo `AnswerId`.
 - **`UserId`:** un jugador participa en muchas partidas. Un índice único solo sobre `UserId` impediría guardar su segunda partida. Lo que no puede repetirse es `(MatchId, UserId)`: un jugador aparece una sola vez en cada partida.
 
-`AnswerOptions.QuestionId`, `PlayerResults.MatchId` y `FinishNotifications.MatchId` repiten el identificador de texto de la tabla padre, además del Guid de la llave foránea. Al insertar datos, los dos valores deben corresponder a la misma fila padre.
+`AnswerOptions.QuestionId` y `PlayerResults.MatchId` repiten el identificador de texto de la tabla padre, además del Guid de la llave foránea. Al insertar datos, los dos valores deben corresponder a la misma fila padre.
 
 ## Cómo se genera el Guid
 
@@ -191,13 +194,13 @@ dotnet ef migrations list --project src/BattleHub.Trivia.Data --no-connect
 
 ## Cómo se rehicieron en el issue #28
 
-Antes había dos migraciones: `20260930163936_CrearResultadosYPreguntas` y `20261004062521_AgregarColaFinalizacion`. Usaban los identificadores de texto como llaves primarias. Como el proyecto todavía no estaba desplegado, se eliminaron junto con el `ModelSnapshot`, y se generaron las 5 migraciones actuales, ya con las llaves Guid del issue #27.
+Antes había dos migraciones: `20260930163936_CrearResultadosYPreguntas` y `20261004062521_AgregarColaFinalizacion`. Usaban los identificadores de texto como llaves primarias. Como el proyecto todavía no estaba desplegado, se eliminaron junto con el `ModelSnapshot`, y se generaron las 5 migraciones de creación, ya con las llaves Guid del issue #27.
 
 Para obtener una migración por tabla, el modelo se construyó por etapas con una herramienta temporal que agregaba una tabla a la vez. Esa herramienta no quedó en el repositorio, y la última migración se generó con el modelo completo.
 
 ## Notas
 
-- **`__EFMigrationsHistory`.** Es la tabla interna en la que EF registra las migraciones aplicadas. Su llave primaria, `MigrationId`, es de texto (`nvarchar`), pero la crea EF y no forma parte del modelo del juego. Ninguna de las 5 tablas del modelo tiene una llave primaria de texto.
+- **`__EFMigrationsHistory`.** Es la tabla interna en la que EF registra las migraciones aplicadas. Su llave primaria, `MigrationId`, es de texto (`nvarchar`), pero la crea EF y no forma parte del modelo del juego. Ninguna de las tablas del modelo tiene una llave primaria de texto.
 - **Borrar una base de prueba.** En `dotnet-ef` 10.0.12, `dotnet ef database drop` **no acepta** `--connection`. Sin esa opción usaría la cadena de `TriviaDbContextFactory` y borraría `BattleHubTrivia`. Para borrar una base de prueba se usa `sqlcmd` conectado a `master`, nombrando **solo** la base de prueba:
 
   ```powershell

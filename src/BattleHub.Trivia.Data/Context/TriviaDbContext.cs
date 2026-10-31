@@ -12,7 +12,6 @@ public sealed class TriviaDbContext(DbContextOptions<TriviaDbContext> options) :
     public DbSet<QuestionRecord> Questions => Set<QuestionRecord>();
 
     public DbSet<AnswerOptionRecord> AnswerOptions => Set<AnswerOptionRecord>();
-    public DbSet<FinishNotificationRecord> FinishNotifications => Set<FinishNotificationRecord>();
 
     public static void ConfigureSqlServer(DbContextOptionsBuilder options, string connectionString)
     {
@@ -22,15 +21,6 @@ public sealed class TriviaDbContext(DbContextOptions<TriviaDbContext> options) :
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<FinishNotificationRecord>(entity =>
-        {
-            entity.ToTable("FinishNotifications");
-            entity.HasKey(item => item.Id);
-            entity.Property(item => item.MatchId).HasMaxLength(64);
-            entity.HasIndex(item => item.MatchId).IsUnique();
-            entity.HasIndex(item => new { item.Delivered, item.NextAttemptAt });
-            entity.HasOne<MatchResultRecord>().WithOne().HasForeignKey<FinishNotificationRecord>(item => item.MatchRefId).OnDelete(DeleteBehavior.Cascade);
-        });
         modelBuilder.Entity<MatchResultRecord>(entity =>
         {
             entity.ToTable("MatchResults", table =>

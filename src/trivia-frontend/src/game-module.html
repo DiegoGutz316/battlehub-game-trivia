@@ -4,17 +4,17 @@
       <div><p class="trivia-game-eyebrow">BATTLEHUB · TRIVIA</p><h1>Trivia Battle</h1></div>
       <div><span data-testid="player-name">${context.currentUser.displayName}</span><small data-testid="match-id">${context.matchId}</small><small data-testid="game-state">${state}</small></div>
     </header>
-    <p if.bind="solo" class="trivia-game-practice" data-testid="solo-badge">Modo playground · Juegas solo y esta partida no se guarda en tu historial ni en tus estadísticas.</p>
+    <p if.bind="solo" class="trivia-game-practice" data-testid="solo-badge">${soloTitle} · Juegas solo y esta partida no se guarda en tu historial ni en tus estadísticas.</p>
     <p if.bind="error" class="trivia-game-error" role="alert">${error}</p>
     <p if.bind="state === 'paused'" class="trivia-game-notice">La vista está pausada. ${solo ? 'La partida' : 'La partida compartida'} continúa en el servidor.</p>
     <p if.bind="(mode === 'match' || solo) && connection !== 'connected'" class="trivia-game-notice" aria-live="polite">Conexión: ${connection}. Las respuestas se habilitarán cuando estés conectado.</p>
     <div class="trivia-game-layout">
       <main class="trivia-game-panel">
-        <div if.bind="mode === 'playground' && !solo" data-testid="solo-offer">
-          <h2>Modo playground</h2>
+        <div if.bind="mode !== 'match' && !solo" data-testid="solo-offer">
+          <h2>${soloTitle}</h2>
           <p>Juega solo: diez preguntas, cuatro opciones y quince segundos para responder. Para jugar contra otras personas, abre Trivia desde las salas del Shell.</p>
           <button type="button" class="trivia-game-primary" click.trigger="playSolo()"
-            disabled.bind="connecting || (state !== 'initialized' && state !== 'running')">${connecting ? 'Conectando…' : 'Jugar en modo playground'}</button>
+            disabled.bind="connecting || (state !== 'initialized' && state !== 'running')">${connecting ? 'Conectando…' : 'Jugar en ' + soloTitle.toLowerCase()}</button>
         </div>
         <div if.bind="phase === 'waiting' && (mode === 'match' || solo)"><h2>Preparando la partida</h2><p>${solo ? 'Cargando las preguntas.' : 'Esperamos a los jugadores.'} Diez preguntas, cuatro opciones y quince segundos para responder.</p></div>
         <div if.bind="question && phase !== 'finished'">

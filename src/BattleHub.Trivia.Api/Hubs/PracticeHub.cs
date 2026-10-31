@@ -1,10 +1,9 @@
 
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BattleHub.Trivia.Api.Hubs;
 
-[AllowAnonymous]
+// Partida de un solo jugador: modo práctica (desde el Shell) y modo playground (sin el Shell). No guarda resultados.
 public sealed class PracticeHub(
     PracticeSessions sessions) : Hub
 {
