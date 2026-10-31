@@ -227,14 +227,13 @@ El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `ci-backend.yml` / `c
 | Workflow | Qué hace | Cuándo corre |
 |---|---|---|
 | `CI Unit` | Solo compilar + pruebas unitarias (backend y/o frontend) | Cambios en código .NET o `src/trivia-frontend` |
-| `CI Backend` | `dotnet format`, build con warnings como errores, unitarias, integración, cobertura, smoke Docker | Cambios en API/Data/Domain/DbInit/tests .NET |
-| `CI Frontend` | Lint, build, Jest, cobertura, smoke Docker (Node.js 22) | Cambios en `src/trivia-frontend` |
+| `CI Backend` | `dotnet format`, build con warnings como errores, unitarias, integración, cobertura, smoke Docker | Todo PR/push a `main`; sus jobs se omiten si el backend no cambió |
+| `CI Frontend` | Lint, build, Jest, cobertura, smoke Docker (Node.js 22) | Todo PR/push a `main`; sus jobs se omiten si el frontend no cambió |
 | `CI Secrets` | gitleaks sobre el historial | Todo PR/push a `main` |
-| `CI Required` | Resume qué CI aplica (puente de branch protection) | Todo PR/push a `main` |
 
-Los workflows de backend, frontend y unit usan filtros `paths` en `push`/`pull_request`, así un cambio solo de frontend no ejecuta el CI del backend (y al revés). Los cambios solo en `docs/` no disparan esos flujos.
+`CI Backend` y `CI Frontend` detectan qué archivos cambiaron y omiten sus jobs si su parte no cambió, así un cambio solo de frontend no ejecuta el CI del backend (y al revés). `CI Unit` usa filtros `paths` en `push`/`pull_request`.
 
-**Protección de rama:** un workflow con `paths` que no se dispara deja el check en *Expected — Waiting* si estaba marcado como obligatorio. Para no bloquear PRs de documentación, marcar como required solo `CI Required / ready` y `CI Secrets / secrets`, y revisar en el resumen del PR que `CI Backend` / `CI Frontend` / `CI Unit` hayan pasado cuando correspondan.
+**Protección de rama:** los checks obligatorios de `main` son `backend` y `frontend`. Esos dos flujos no usan `paths` porque un flujo que no se dispara no reporta su check, y el PR se queda en *Expected — Waiting*. En cambio, GitHub cuenta un job omitido por condición como aprobado: un PR de una sola parte o solo de `docs/` se puede fusionar, y si un job falla la fusión sigue bloqueada. Si falla la detección de cambios, los jobs corren igual.
 
 Para ver la cobertura localmente:
 

@@ -55,7 +55,7 @@ jobs:
             core.setOutput('sha', pulls.data[0].head.sha);
 
       - name: Build comment markdown
-        if: steps.pr.outputs.number != ''
+        if: steps.pr.outputs.number != '' && hashFiles('coverage/**') != ''
         env:
           HEAD_SHA: ${{ steps.pr.outputs.sha }}
           COVERAGE_THRESHOLD: "85"
