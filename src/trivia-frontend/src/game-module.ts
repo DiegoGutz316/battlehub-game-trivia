@@ -102,7 +102,7 @@ export class GameModule implements IGameModule {
   private notifyFinished(): void {
     if (this.mode !== 'match' || !this.context) return;
     const detail: GameFinishedDetail = { matchId: this.context.matchId, gameType: this.context.gameType };
-    window.dispatchEvent(new CustomEvent(GAME_FINISHED_EVENT, { detail }));
+    this.context.events?.dispatchEvent(new CustomEvent(GAME_FINISHED_EVENT, { detail }));
   }
   private markConnected(id: string, connected: boolean): void {
     this.players = this.players.map(player => player.userId === id ? { ...player, isConnected: connected } : player);
