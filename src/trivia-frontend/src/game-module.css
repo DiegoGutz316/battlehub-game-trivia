@@ -1,7 +1,7 @@
 .trivia-game {
   color: #f3f4ff;
   background: #101321;
-  padding: 24px;
+  padding: 16px;
   border-radius: 20px;
   font-family: system-ui, sans-serif;
 }
@@ -18,27 +18,36 @@
   color: #b8bfd8;
 }
 
+.trivia-game h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
 .trivia-game-eyebrow {
+  margin: 0;
   color: #b99dff;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .trivia-game-layout {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);
-  gap: 20px;
+  gap: 12px;
 }
 
 .trivia-game-panel {
   background: #1c2135;
-  padding: 24px;
+  padding: 16px;
   border-radius: 16px;
-  margin-top: 20px;
+  margin-top: 12px;
 }
 
 .trivia-game h2 {
-  font-size: 24px;
-  line-height: 1.4;
+  margin: 8px 0 12px;
+  font-size: 20px;
+  line-height: 1.3;
 }
 
 .trivia-game-options {
@@ -51,7 +60,7 @@
   color: #f3f4ff;
   background: #343a56;
   border: 2px solid #596080;
-  padding: 16px;
+  padding: 12px 16px;
   border-radius: 12px;
   text-align: left;
   cursor: pointer;
@@ -87,16 +96,28 @@
   border-bottom: 1px solid #38405b;
 }
 
+/* Reserva el lugar del mensaje de la ronda: al aparecer no empuja el contenido. */
+.trivia-game-round-status {
+  min-height: 24px;
+  margin-top: 8px;
+}
+
+.trivia-game-round-status p {
+  margin: 0;
+}
+
 .trivia-game-notice {
+  margin: 8px 0 0;
   background: #303450;
-  padding: 16px;
+  padding: 8px 12px;
   border-radius: 12px;
 }
 
 .trivia-game-practice {
+  margin: 8px 0 0;
   color: #1b1330;
   background: #c9b3ff;
-  padding: 12px 16px;
+  padding: 8px 12px;
   border-radius: 12px;
   font-weight: 700;
 }
@@ -109,8 +130,9 @@
 }
 
 .trivia-game-error {
+  margin: 8px 0 0;
   background: #552839;
-  padding: 16px;
+  padding: 8px 12px;
   border-radius: 12px;
 }
 

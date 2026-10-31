@@ -25,8 +25,10 @@
               class="${review && review.correctAnswerId === option.answerId ? 'trivia-game-correct' : selectedAnswerId === option.answerId ? 'trivia-game-selected' : ''}"
               disabled.bind="phase !== 'playing' || state !== 'running' || connection !== 'connected' || answered || submitting || seconds <= 0">${option.text}</button>
           </div>
-          <p if.bind="answered && phase === 'playing'" aria-live="polite">Respuesta recibida. Espera el resultado de la ronda.</p>
-          <p if.bind="review" aria-live="polite">${review.isCorrect ? '¡Correcto!' : 'Ronda cerrada.'} +${review.pointsEarned} puntos · Total: ${review.totalScore}</p>
+          <div class="trivia-game-round-status" aria-live="polite">
+            <p if.bind="answered && phase === 'playing'">Respuesta recibida. Espera el resultado de la ronda.</p>
+            <p if.bind="review">${review.isCorrect ? '¡Correcto!' : 'Ronda cerrada.'} +${review.pointsEarned} puntos · Total: ${review.totalScore}</p>
+          </div>
         </div>
         <div if.bind="result && solo">
           <h2>Partida terminada</h2>
