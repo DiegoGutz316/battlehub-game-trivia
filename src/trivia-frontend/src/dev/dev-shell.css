@@ -1,8 +1,32 @@
+body {
+  margin: 0;
+}
+
 .trivia-dev {
+  box-sizing: border-box;
+  padding: 8px 12px;
   font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+/* En una sola línea: con el área mínima de 700 px, la página debe caber en 768 px de alto (R-33). */
+.trivia-dev-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  margin-bottom: 8px;
+}
+
+.trivia-dev-bar h2,
+.trivia-dev-bar p {
+  margin: 0;
+  font-size: inherit;
 }
 
 .trivia-dev-error {
+  margin: 0 0 8px;
   color: #b91c1c;
 }
 
@@ -12,6 +36,6 @@
   min-width: 1024px;
   max-width: 1440px;
   min-height: 700px;
-  padding: 16px;
+  padding: 8px;
   border: 2px dashed #64748b;
 }
