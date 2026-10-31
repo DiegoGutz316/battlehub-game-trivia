@@ -11,7 +11,6 @@ export interface GameContext {
   matchId: string;
   gameType: 'typing' | 'trivia' | 'memory';
   currentUser: { id: string; displayName: string };
-  getAccessToken?: () => Promise<string>;
   /** Jugadores de la sala, incluido currentUser. Obligatorio en una partida. */
   participants?: GamePlayer[];
   /** Sin valor es una partida: 'practice' se abre desde el Shell sin sala y 'playground' se abre sin el Shell. */

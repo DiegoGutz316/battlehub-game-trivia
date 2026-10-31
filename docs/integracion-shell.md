@@ -1,8 +1,12 @@
 ﻿# Integración de Trivia con el Shell
 
-Trivia es una aplicación propia (API, hub de SignalR y microfrontend). Según el requisito **R-46**, el juego no llama a Matchmaking: avisa el fin de partida al Shell y el Shell avisa a Matchmaking.
+Trivia es una aplicación propia (API, hub de SignalR y microfrontend) y solo se comunica con el Shell. Según los requisitos de la Etapa 2:
 
-El Shell abre la sala y le dice al juego quiénes participan. La API de Trivia todavía valida el token de la sesión del Shell, como se explica en [Autenticación de Trivia](#autenticación-de-trivia).
+- **R-30:** el juego no tiene contacto con Auth0.
+- **R-46:** el juego no llama a Matchmaking. Avisa el fin de partida al Shell y el Shell avisa a Matchmaking.
+- El Shell decide qué juegos ve cada usuario según Profile, así que el juego tampoco consulta permisos.
+
+El Shell inicia la sesión, abre la sala y le dice al juego quién juega. La API de Trivia no valida tokens: confía en lo que recibe del Shell.
 
 > **Contrato propuesto por el Equipo 5, pendiente de confirmar con el Equipo 3.** El documento de requisitos pide comunicación por eventos, pero no define los nombres ni los datos. Lo de esta guía es lo que implementa Trivia hoy.
 
@@ -20,11 +24,10 @@ const context: GameContext = {
   gameType: 'trivia',
   currentUser: { id: user.id, displayName: user.displayName },
   participants: room.participants, // [{ userId, displayName }]
-  getAccessToken: () => auth.getAccessToken(),
 };
 ```
 
-`getMatchmakingAccessToken` ya no se usa; si el Shell lo sigue enviando, el juego lo ignora.
+`getAccessToken` y `getMatchmakingAccessToken` ya no se usan; si el Shell los sigue enviando, el juego los ignora.
 
 ### 2. Escuchar el fin de partida y avisar a Matchmaking
 
@@ -68,7 +71,7 @@ La práctica no se guarda en el historial y no emite `battlehub:game-finished`, 
 
 ## Cómo funciona una partida
 
-1. Cada jugador se conecta a `/hubs/trivia` y llama a `JoinMatch` con `matchId` y `participants`.
+1. Cada jugador se conecta a `/hubs/trivia` y llama a `JoinMatch` con `matchId`, su `userId` y `participants`.
 2. El primero que entra crea la partida con esa lista de jugadores. Las llamadas siguientes no la cambian, y quien no esté en la lista recibe `PLAYER_NOT_IN_MATCH`.
 3. La partida empieza cuando todos los jugadores de la lista están conectados.
 4. Al terminar, el servidor guarda el resultado y envía `GameFinished` a los jugadores. El microfrontend muestra el resultado y emite `battlehub:game-finished`.
@@ -77,20 +80,18 @@ Si todos los jugadores se desconectan antes del final, nadie avisa al Shell. La 
 
 El contrato completo del hub está en [contrato-signalr-trivia.md](contrato-signalr-trivia.md).
 
-## Autenticación de Trivia
+## Qué protege y qué no la API
 
-Trivia acepta el access token de la sesión del Shell. Los valores están en `appsettings.json`:
+Sin tokens, la API no puede comprobar quién llama:
 
-| Configuración   | Valor                                        | Descripción                                  |
-| --------------- | -------------------------------------------- | -------------------------------------------- |
-| `Auth:Issuer`   | `https://dev-jaii1peslxnejq0y.us.auth0.com/` | Emisor de los tokens de la sesión del Shell  |
-| `Auth:Audience` | `https://api.battlehub.local/profile`        | Audiencia de la plataforma que entrega Shell |
+- El hub confía en el `userId` que recibe. Una vez que una conexión se une, ya no puede cambiar de jugador ni de partida.
+- `POST /api/games/trivia/results` y las consultas de resultados, historial y estadísticas no piden credenciales.
 
-La API valida la firma, el emisor, la audiencia y el vencimiento. El jugador es el claim `sub`. Al ejecutar `JoinMatch`, además consulta en Profile que el jugador tenga el permiso `games.trivia.play`; si no lo tiene, el hub responde `PERMISSION_DENIED`, y si Profile no responde, `PROFILE_UNAVAILABLE`.
+Las respuestas, el tiempo y los puntajes siguen calculándose en el servidor. El cliente no los envía.
 
 ## Pruebas
 
-Las pruebas automáticas cubren la validación de la sala, una partida completa de dos jugadores con el resultado guardado, el evento `battlehub:game-finished` y los modos práctica y playground.
+Las pruebas automáticas cubren la validación de la sala, la identidad de cada conexión, una partida completa de dos jugadores con el resultado guardado, el evento `battlehub:game-finished` y los modos práctica y playground.
 
 Falta comprobarlo con el Shell real, cuando implemente los tres puntos de arriba:
 
