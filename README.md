@@ -1,12 +1,14 @@
 # battlehub-game-trivia
 
-[![CI](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci.yml)
+[![CI Backend](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-backend.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-backend.yml)
+[![CI Frontend](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-frontend.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-frontend.yml)
+[![CI Unit](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-unit.yml/badge.svg)](https://github.com/DiegoGutz316/battlehub-game-trivia/actions/workflows/ci-unit.yml)
 
 Microservicio del juego **Trivia Battle** (Equipo 5) del proyecto BattleHub.
 
 ## Entrega de integración local
 
-El juego no llama a Matchmaking: solo se comunica con el Shell. Lo que el Shell debe entregar y escuchar está en [Integración con el Shell](docs/integracion-shell.md).
+Trivia no tiene contacto con Auth0, Profile ni Matchmaking: solo se comunica con el Shell. Lo que el Shell debe entregar y escuchar está en [Integración con el Shell](docs/integracion-shell.md).
 
 Contratos, arquitectura y reglas del proyecto: [battlehub-contracts](https://github.com/javiercoulon-public/battlehub-contracts).
 
@@ -100,8 +102,6 @@ Problemas frecuentes:
 
 Requisito: [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
 
-La API acepta el token de la sesión del Shell (ver [Integración con el Shell](docs/integracion-shell.md#autenticación-de-trivia)).
-
 Preparar esquema y datos, luego arrancar la API (LocalDB por defecto si no hay cadena de conexión):
 
 ```bash
@@ -135,7 +135,7 @@ El job `backend-docker` del CI construye API y DbInit, aplica `migrate` + `seed`
 
 ### Frontend (Aurelia)
 
-Requisito: [Node.js 24 LTS](https://nodejs.org/) (`>=24.11.0 <25`, fijado en `.nvmrc` y en `engines` por el ADR-003).
+Requisito: [Node.js 22 LTS](https://nodejs.org/) (`>=22 <23`, fijado en `.nvmrc` y en `engines`; R-42).
 
 Todos los comandos se corren desde `src/trivia-frontend`:
 
@@ -155,7 +155,7 @@ npm test         # lint + pruebas unitarias con Jest
 
 #### Docker
 
-`src/trivia-frontend/Dockerfile` tiene dos etapas: compila con Node 24 Alpine y copia solo `dist/` a nginx sin root (`nginx-unprivileged`, variante `alpine-slim`), que escucha en el puerto 8080. Desde la raíz del repositorio:
+`src/trivia-frontend/Dockerfile` tiene dos etapas: compila con Node 22 Alpine y copia solo `dist/` a nginx sin root (`nginx-unprivileged`, variante `alpine-slim`), que escucha en el puerto 8080. Desde la raíz del repositorio:
 
 ```bash
 docker build -t battlehub-trivia-frontend src/trivia-frontend
@@ -220,7 +220,20 @@ El CI mide la cobertura de líneas en cada ejecución:
 - **Frontend:** Jest genera `coverage/coverage-summary.json` (y el reporte HTML en `coverage/lcov-report/`).
 - **En cada pull request**, el job `coverage-comment` publica un comentario con la cobertura de backend y frontend, y lo actualiza en cada push en vez de crear uno nuevo.
 
-El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `.github/workflows/ci.yml`), tanto en el backend como en el frontend. Con `ENFORCE_COVERAGE: "true"`, si alguna de las dos partes queda por debajo, su job (`backend` o `frontend`) falla y el PR no pasa el CI. Exactamente 85 % cumple.
+El mínimo es **85 %** de líneas (`COVERAGE_THRESHOLD` en `ci-backend.yml` / `ci-frontend.yml`), tanto en el backend como en el frontend. Con `ENFORCE_COVERAGE: "true"`, si alguna de las dos partes queda por debajo, su job falla y el PR no pasa el CI. Exactamente 85 % cumple.
+
+## Integración continua (GitHub Actions)
+
+| Workflow | Qué hace | Cuándo corre |
+|---|---|---|
+| `CI Unit` | Solo compilar + pruebas unitarias (backend y/o frontend) | Cambios en código .NET o `src/trivia-frontend` |
+| `CI Backend` | `dotnet format`, build con warnings como errores, unitarias, integración, cobertura, smoke Docker | Todo PR/push a `main`; sus jobs se omiten si el backend no cambió |
+| `CI Frontend` | Lint, build, Jest, cobertura, smoke Docker (Node.js 22) | Todo PR/push a `main`; sus jobs se omiten si el frontend no cambió |
+| `CI Secrets` | gitleaks sobre el historial | Todo PR/push a `main` |
+
+`CI Backend` y `CI Frontend` detectan qué archivos cambiaron y omiten sus jobs si su parte no cambió, así un cambio solo de frontend no ejecuta el CI del backend (y al revés). `CI Unit` usa filtros `paths` en `push`/`pull_request`.
+
+**Protección de rama:** los checks obligatorios de `main` son `backend` y `frontend`. Esos dos flujos no usan `paths` porque un flujo que no se dispara no reporta su check, y el PR se queda en *Expected — Waiting*. En cambio, GitHub cuenta un job omitido por condición como aprobado: un PR de una sola parte o solo de `docs/` se puede fusionar, y si un job falla la fusión sigue bloqueada. Si falla la detección de cambios, los jobs corren igual.
 
 Para ver la cobertura localmente:
 
@@ -241,13 +254,12 @@ npx jest
 
 Ningún valor sensible (contraseñas, tokens, API keys) se escribe en archivos del repositorio. `appsettings.json` solo tiene valores públicos y deja vacíos los sensibles.
 
-| Clave en `appsettings.json`       | Variable de entorno                          | ¿Sensible?                          | Dónde va                                                                                                             |
-| --------------------------------- | -------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `ConnectionStrings:Trivia`        | `ConnectionStrings__Trivia`                  | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                      |
-| `Auth:Issuer`, `Auth:Audience`    | `Auth__Issuer`, `Auth__Audience`             | No                                  | `appsettings.json`: emisor y audiencia del token de sesión del Shell, acordados con Shell                            |
-| `Profile:BaseUrl`, `Cors:Origins` | `Profile__BaseUrl`, `Cors__Origins__0`, etc. | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                          |
-| `MSSQL_SA_PASSWORD`               | `MSSQL_SA_PASSWORD`                          | **Sí**                              | Solo en `.env` para Docker Compose                                                                                   |
-| `TRIVIA_API_URL` (frontend)       | `TRIVIA_API_URL`                             | No                                  | Build-arg del frontend / variable antes de `npm start` o `npm run build`. En Compose: URL del navegador hacia la API |
+| Clave en `appsettings.json` | Variable de entorno                    | ¿Sensible?                          | Dónde va                                                                                                             |
+| --------------------------- | -------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionStrings:Trivia`  | `ConnectionStrings__Trivia`            | Sí, si incluye usuario y contraseña | Local: user-secrets (vacía = LocalDB `BattleHubTrivia`). Docker o servidor: variable de entorno                      |
+| `Cors:Origins`              | `Cors__Origins__0`, `Cors__Origins__1` | No                                  | `appsettings.json`; se reemplazan por variable de entorno según el ambiente                                          |
+| `MSSQL_SA_PASSWORD`         | `MSSQL_SA_PASSWORD`                    | **Sí**                              | Solo en `.env` para Docker Compose                                                                                   |
+| `TRIVIA_API_URL` (frontend) | `TRIVIA_API_URL`                       | No                                  | Build-arg del frontend / variable antes de `npm start` o `npm run build`. En Compose: URL del navegador hacia la API |
 
 **En local**, los valores sensibles se guardan con [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets), fuera de la carpeta del repositorio (en Windows, `%APPDATA%\Microsoft\UserSecrets\`). Solo se leen en el entorno _Development_:
 

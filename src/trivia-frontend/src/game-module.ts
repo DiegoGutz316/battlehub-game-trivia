@@ -48,8 +48,6 @@ export class GameModule implements IGameModule {
     if (context?.gameType !== 'trivia' || !context.currentUser?.id || (mode === 'match' && !context.matchId))
       throw new Error('Contexto inválido: falta matchId, gameType trivia o currentUser');
     if (this.state !== 'created') throw new Error('El juego ya fue inicializado');
-    if (mode === 'match' && !context.getAccessToken)
-      throw new Error('El Shell debe entregar autorización de Trivia.');
     if (mode === 'match' && !context.participants?.some(player => player.userId === context.currentUser.id))
       throw new Error('El Shell debe entregar los jugadores de la sala.');
     this.context = context;
@@ -61,7 +59,7 @@ export class GameModule implements IGameModule {
   private async join(): Promise<void> {
     const context = this.context;
     if (!context || !this.live()) return;
-    await this.client!.joinMatch({ matchId: context.matchId, participants: context.participants ?? [] });
+    await this.client!.joinMatch({ matchId: context.matchId, userId: context.currentUser.id, participants: context.participants ?? [] });
     this.joined = true;
   }
   private subscribe(client: TriviaHubClient): void {
@@ -104,7 +102,7 @@ export class GameModule implements IGameModule {
   private notifyFinished(): void {
     if (this.mode !== 'match' || !this.context) return;
     const detail: GameFinishedDetail = { matchId: this.context.matchId, gameType: this.context.gameType };
-    window.dispatchEvent(new CustomEvent(GAME_FINISHED_EVENT, { detail }));
+    this.context.events?.dispatchEvent(new CustomEvent(GAME_FINISHED_EVENT, { detail }));
   }
   private markConnected(id: string, connected: boolean): void {
     this.players = this.players.map(player => player.userId === id ? { ...player, isConnected: connected } : player);
@@ -117,7 +115,7 @@ export class GameModule implements IGameModule {
     if (!this.context) throw new Error('Falta llamar a initialize()');
     if (this.connecting) return;
     if (this.client) { this.state = 'running'; return; }
-    if (this.mode === 'match') { await this.connect(new SignalRTriviaClient(apiUrl, this.context.getAccessToken!)); return; }
+    if (this.mode === 'match') { await this.connect(new SignalRTriviaClient(apiUrl)); return; }
     this.state = 'running';
     if (this.mode === 'practice') await this.playSolo();
   }
@@ -166,15 +164,11 @@ export class GameModule implements IGameModule {
   }
   public async loadHistory(): Promise<void> {
     const context = this.context;
-    if (!context?.getAccessToken || this.loadingHistory || !this.live()) return;
+    if (!context || this.mode !== 'match' || this.loadingHistory || !this.live()) return;
     this.loadingHistory = true; this.error = '';
     try {
-      const token = await context.getAccessToken();
-      if (!this.live()) return;
       const base = `${apiUrl}/api/games/trivia/players/${encodeURIComponent(context.currentUser.id)}`;
-      const responses = await Promise.all(['history', 'stats'].map(path => fetch(`${base}/${path}`, {
-        headers: { Authorization: `Bearer ${token}` }, signal: this.abort.signal,
-      })));
+      const responses = await Promise.all(['history', 'stats'].map(path => fetch(`${base}/${path}`, { signal: this.abort.signal })));
       if (responses.some(response => !response.ok)) throw new Error('No se pudo cargar tu historial.');
       const [history, statistics] = await Promise.all(responses.map(response => response.json()));
       if (this.live()) { this.history = history; this.statistics = statistics; }

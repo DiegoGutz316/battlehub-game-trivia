@@ -38,7 +38,7 @@ jest.mock('../src/services/trivia-hub/practice-trivia-client', () => ({ Practice
 jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn() }));
 
 const withoutShell: GameContext = { matchId: 'match-dev-001', gameType: 'trivia', currentUser: { id: 'user-dev-1', displayName: 'Jugador 1' }, mode: 'playground' };
-const fromRoom: GameContext = { matchId: 'sala', gameType: 'trivia', currentUser: withoutShell.currentUser, participants: [{ userId: 'user-dev-1', displayName: 'Jugador 1' }], getAccessToken: jest.fn(async () => 'token') };
+const fromRoom: GameContext = { matchId: 'sala', gameType: 'trivia', currentUser: withoutShell.currentUser, participants: [{ userId: 'user-dev-1', displayName: 'Jugador 1' }] };
 const practice: GameContext = { matchId: '', gameType: 'trivia', currentUser: withoutShell.currentUser, mode: 'practice' };
 const now = (): string => new Date().toISOString();
 const question: Question = {
@@ -87,7 +87,7 @@ describe('modo playground (sin el Shell)', () => {
 
       expect(PracticeTriviaClient).toHaveBeenCalledWith('http://localhost:5185', withoutShell.currentUser);
       expect(SignalRTriviaClient).not.toHaveBeenCalled();
-      expect(latest().joinMatch).toHaveBeenCalledWith({ matchId: 'match-dev-001', participants: [] });
+      expect(latest().joinMatch).toHaveBeenCalledWith({ matchId: 'match-dev-001', userId: 'user-dev-1', participants: [] });
       expect(game.solo).toBe(true);
       expect(game.state).toBe('running');
       expect(fixture.appHost.querySelector('[data-testid="solo-badge"]')?.textContent).toContain('no se guarda en tu historial');
@@ -170,7 +170,7 @@ describe('modo playground (sin el Shell)', () => {
     await game.dispose();
   });
 
-  it('al reconectar recupera la partida sin pedir tokens al Shell', async () => {
+  it('al reconectar recupera la partida', async () => {
     const game = new GameModule();
     await game.initialize(withoutShell);
     await game.playSolo();
@@ -225,15 +225,15 @@ describe('modo playground (sin el Shell)', () => {
 
   it('no avisa al Shell cuando termina: no hay sala que cerrar', async () => {
     const finishedEvent = jest.fn();
-    window.addEventListener(GAME_FINISHED_EVENT, finishedEvent);
+    const events = new EventTarget();
+    events.addEventListener(GAME_FINISHED_EVENT, finishedEvent);
     const game = new GameModule();
-    await game.initialize(withoutShell);
+    await game.initialize({ ...withoutShell, events });
     await game.playSolo();
 
     emit('GameFinished', finished(500, 3));
 
     expect(finishedEvent).not.toHaveBeenCalled();
-    window.removeEventListener(GAME_FINISHED_EVENT, finishedEvent);
     await game.dispose();
   });
 });
@@ -267,6 +267,22 @@ describe('modo práctica (desde el Shell, sin sala)', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       expect(game.solo).toBe(true);
       expect(game.error).toBe('');
+    } finally { await game.dispose(); await fixture.stop(true); }
+  });
+
+  it('acepta el contexto del Shell sin matchId y no avisa el fin: no hay sala que cerrar', async () => {
+    const finishedEvent = jest.fn();
+    const events = new EventTarget();
+    events.addEventListener(GAME_FINISHED_EVENT, finishedEvent);
+    const fromShell = { mode: 'practice', gameType: 'trivia', currentUser: practice.currentUser, events } as unknown as GameContext;
+    const { game, text, fixture } = await render(fromShell);
+    try {
+      await game.start();
+
+      expect(await text()).toContain('Modo práctica');
+      emit('GameFinished', finished(500, 3));
+      expect(await text()).toContain('Partida terminada');
+      expect(finishedEvent).not.toHaveBeenCalled();
     } finally { await game.dispose(); await fixture.stop(true); }
   });
 

@@ -59,6 +59,7 @@ export const TRIVIA_HUB_METHODS = {
 
 export interface JoinMatchRequest {
   matchId: string;
+  userId: string;
   participants: { userId: string; displayName: string }[];
 }
 
@@ -153,9 +154,6 @@ export type GameErrorCode =
   | 'MATCH_NOT_FOUND'
   | 'PLAYER_NOT_IN_MATCH'
   | 'MATCH_FINISHED'
-  | 'UNAUTHORIZED'
-  | 'PERMISSION_DENIED'
-  | 'PROFILE_UNAVAILABLE'
   | 'QUESTION_NOT_ACTIVE'
   | 'QUESTION_CLOSED'
   | 'ALREADY_ANSWERED'

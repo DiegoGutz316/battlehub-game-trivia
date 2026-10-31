@@ -1,7 +1,5 @@
 
-using System.Security.Claims;
 using BattleHub.Trivia.Api.Hubs;
-using BattleHub.Trivia.Api.Profiles;
 using BattleHub.Trivia.Domain.Entities;
 using BattleHub.Trivia.Domain.Interfaces;
 using BattleHub.Trivia.Domain.Services;
@@ -89,33 +87,20 @@ public sealed class TriviaHubTests
         return hubContext;
     }
 
-    private static IProfileGateway Profiles(bool canPlay = true)
-    {
-        var profiles = Substitute.For<IProfileGateway>();
-
-        profiles
-            .CanPlayAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(canPlay));
-
-        return profiles;
-    }
-
     private static HubCallerContext CreateContext(
         Dictionary<object, object?>? items = null,
-        string connectionId = "connection-one",
-        string userId = "player-one")
+        string connectionId = "connection-one")
     {
         var context = Substitute.For<HubCallerContext>();
 
         context.Items.Returns(items ?? []);
         context.ConnectionId.Returns(connectionId);
-        context.User.Returns(new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", userId)], "TestAuth")));
 
         return context;
     }
 
-    private static TriviaHub CreateHub(TriviaSessions sessions, HubCallerContext context, IGroupManager? groups = null, IProfileGateway? profiles = null) =>
-        new(sessions, profiles ?? Profiles())
+    private static TriviaHub CreateHub(TriviaSessions sessions, HubCallerContext context, IGroupManager? groups = null) =>
+        new(sessions)
         {
             Context = context,
             Groups = groups ?? Substitute.For<IGroupManager>()
@@ -142,7 +127,8 @@ public sealed class TriviaHubTests
     {
         var context = CreateContext(new Dictionary<object, object?>
         {
-            ["room"] = "match-one"
+            ["room"] = "match-one",
+            ["user"] = "player-one"
         });
         var hub = CreateHub(CreateUnusedSessions(), context);
 
@@ -163,7 +149,7 @@ public sealed class TriviaHubTests
         var hub = CreateHub(CreateUnusedSessions(), context, groups);
 
         var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.JoinMatch(new JoinRequest("match-two", OnePlayer)));
+            () => hub.JoinMatch(new JoinRequest("match-two", "player-one", OnePlayer)));
 
         Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
         await groups.DidNotReceiveWithAnyArgs()
@@ -171,17 +157,19 @@ public sealed class TriviaHubTests
     }
 
     [Fact]
-    public async Task JoinMatchRejectsPlayerWithoutTriviaPermission()
+    public async Task JoinMatchRejectsDifferentPlayerOnSameConnection()
     {
-        var groups = Substitute.For<IGroupManager>();
-        var hub = CreateHub(CreateUnusedSessions(), CreateContext(), groups, Profiles(canPlay: false));
+        var context = CreateContext(new Dictionary<object, object?>
+        {
+            ["room"] = "match-one",
+            ["user"] = "player-one"
+        });
+        var hub = CreateHub(CreateUnusedSessions(), context);
 
         var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.JoinMatch(new JoinRequest("match-one", OnePlayer)));
+            () => hub.JoinMatch(new JoinRequest("match-one", "player-two", [new("player-one", "Uno"), new("player-two", "Dos")])));
 
-        Assert.Equal("PERMISSION_DENIED", exception.Message);
-        await groups.DidNotReceiveWithAnyArgs()
-            .AddToGroupAsync(default!, default!, default);
+        Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
     }
 
     public static TheoryData<string, string, RoomPlayer[]?, string> InvalidRooms => new()
@@ -205,10 +193,10 @@ public sealed class TriviaHubTests
     public async Task JoinMatchRejectsInvalidRoom(string matchId, string userId, RoomPlayer[]? players, string expected)
     {
         var groups = Substitute.For<IGroupManager>();
-        var hub = CreateHub(CreateUnusedSessions(), CreateContext(userId: userId), groups);
+        var hub = CreateHub(CreateUnusedSessions(), CreateContext(), groups);
 
         var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.JoinMatch(new JoinRequest(matchId, players!)));
+            () => hub.JoinMatch(new JoinRequest(matchId, userId, players!)));
 
         Assert.Equal(expected, exception.Message);
         await groups.DidNotReceiveWithAnyArgs()
@@ -224,7 +212,7 @@ public sealed class TriviaHubTests
     }
 
     [Fact]
-    public async Task JoinMatchAddsPlayerToSignalRGroup()
+    public async Task JoinMatchAddsPlayerToSignalRGroupAndRemembersConnectionIdentity()
     {
         using var services = CreateGameServices();
         var sessions = CreateSessions(
@@ -234,7 +222,7 @@ public sealed class TriviaHubTests
         var context = CreateContext();
         var hub = CreateHub(sessions, context, groups);
 
-        await hub.JoinMatch(new JoinRequest("match-one", OnePlayer));
+        await hub.JoinMatch(new JoinRequest("match-one", "player-one", OnePlayer));
 
         await groups.Received(1).AddToGroupAsync(
             "connection-one",
@@ -242,6 +230,7 @@ public sealed class TriviaHubTests
             Arg.Any<CancellationToken>());
 
         Assert.Equal("match-one", context.Items["room"]);
+        Assert.Equal("player-one", context.Items["user"]);
 
         await hub.SubmitAnswer(new AnswerRequest("match-one", "q1", "a"));
     }
@@ -255,14 +244,14 @@ public sealed class TriviaHubTests
             CreateHubContext());
 
         await CreateHub(sessions, CreateContext())
-            .JoinMatch(new JoinRequest("match-one", OnePlayer));
+            .JoinMatch(new JoinRequest("match-one", "player-one", OnePlayer));
 
         var groups = Substitute.For<IGroupManager>();
-        var context = CreateContext(connectionId: "connection-two", userId: "player-two");
+        var context = CreateContext(connectionId: "connection-two");
         var hub = CreateHub(sessions, context, groups);
 
         var exception = await Assert.ThrowsAsync<HubException>(
-            () => hub.JoinMatch(new JoinRequest("match-one", [new("player-two", "Dos")])));
+            () => hub.JoinMatch(new JoinRequest("match-one", "player-two", [new("player-two", "Dos")])));
 
         Assert.Equal("PLAYER_NOT_IN_MATCH", exception.Message);
 
@@ -277,5 +266,6 @@ public sealed class TriviaHubTests
             Arg.Any<CancellationToken>());
 
         Assert.False(context.Items.ContainsKey("room"));
+        Assert.False(context.Items.ContainsKey("user"));
     }
 }

@@ -16,7 +16,9 @@ public sealed class ResultRepository(TriviaDbContext db) : IResultRepository
             .AnyAsync(match => match.MatchId == result.MatchId, cancellationToken);
 
         if (exists)
+        {
             throw new MatchAlreadyExistsException(result.MatchId);
+        }
 
         db.MatchResults.Add(ToRecord(result));
 

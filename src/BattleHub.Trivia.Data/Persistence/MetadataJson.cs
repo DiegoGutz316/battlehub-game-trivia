@@ -17,7 +17,9 @@ internal static class MetadataJson
     public static TriviaMetadata Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
+        {
             return new TriviaMetadata();
+        }
 
         return JsonSerializer.Deserialize<TriviaMetadata>(json, Options) ?? new TriviaMetadata();
     }

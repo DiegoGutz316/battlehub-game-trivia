@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Net;
+using System.Text.Json;
 using System.Threading.Channels;
 using BattleHub.Trivia.Api.Hubs;
 using BattleHub.Trivia.Domain.Interfaces;
@@ -20,8 +21,8 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var ct = timeout.Token;
         var id = "live-" + Guid.NewGuid().ToString("N");
-        await using var one = Connection("player-one");
-        await using var two = Connection("player-two");
+        await using var one = Connection();
+        await using var two = Connection();
         var questions = Channel.CreateUnbounded<JsonElement>();
         var finished = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         var finishedForTwo = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -29,8 +30,8 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
         one.On<JsonElement>("GameFinished", data => { finished.TrySetResult(data); });
         two.On<JsonElement>("GameFinished", data => { finishedForTwo.TrySetResult(data); });
         await one.StartAsync(ct); await two.StartAsync(ct);
-        await one.InvokeAsync("JoinMatch", new JoinRequest(id, Room), ct);
-        await two.InvokeAsync("JoinMatch", new JoinRequest(id, Room), ct);
+        await one.InvokeAsync("JoinMatch", new JoinRequest(id, "player-one", Room), ct);
+        await two.InvokeAsync("JoinMatch", new JoinRequest(id, "player-two", Room), ct);
         using var scope = factory.Services.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IQuestionRepository>();
         var sessions = factory.Services.GetRequiredService<TriviaSessions>();
@@ -58,21 +59,30 @@ public sealed class LiveHubTests(TriviaApiFactory factory)
     }
 
     [Fact]
-    public async Task PlayerOutsideTheRoomIsRejected()
+    public async Task HubRequiresNoTokenButRejectsPlayerOutsideTheRoom()
     {
-        await using var outsider = Connection("ajeno");
+        await using var outsider = Connection();
         await outsider.StartAsync();
 
         var error = await Assert.ThrowsAsync<HubException>(() => outsider.InvokeAsync(
-            "JoinMatch", new JoinRequest("room-" + Guid.NewGuid().ToString("N"), Room)));
+            "JoinMatch", new JoinRequest("room-" + Guid.NewGuid().ToString("N"), "ajeno", Room)));
 
         Assert.Contains("PLAYER_NOT_IN_MATCH", error.Message);
     }
 
-    private HubConnection Connection(string user) => new HubConnectionBuilder().WithUrl("http://localhost/hubs/trivia", options =>
+    [Fact]
+    public async Task PublicApiAnswersWithoutCredentials()
+    {
+        using var client = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/games/trivia/players/player-one/history")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/games/trivia/players/player-one/stats")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/hubs/trivia/negotiate?negotiateVersion=1", null)).StatusCode);
+    }
+
+    private HubConnection Connection() => new HubConnectionBuilder().WithUrl("http://localhost/hubs/trivia", options =>
     {
         options.Transports = HttpTransportType.LongPolling;
         options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
-        options.AccessTokenProvider = () => Task.FromResult<string?>(factory.Token(user, writer: false));
     }).Build();
 }

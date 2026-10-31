@@ -19,7 +19,7 @@ const mockClient = {
 jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn(() => mockClient) }));
 
 const playground: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'one', displayName: 'Uno' }, mode: 'playground' };
-const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'one', displayName: 'Uno' }, participants: [{ userId: 'one', displayName: 'Uno' }], getAccessToken: jest.fn(async () => 'trivia-token') };
+const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'one', displayName: 'Uno' }, participants: [{ userId: 'one', displayName: 'Uno' }] };
 const players: Player[] = [
   { userId: 'one', displayName: 'Uno', score: 0, isConnected: true },
   { userId: 'two', displayName: 'Dos', score: 0, isConnected: false },
@@ -320,7 +320,7 @@ describe('historial', () => {
     expect(game.history).toEqual([]);
   });
 
-  it('pide el historial con el token de Trivia', async () => {
+  it('pide el historial y las estadísticas del jugador, sin credenciales', async () => {
     const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => [] });
     globalThis.fetch = fetchMock;
     const game = await running();
@@ -328,7 +328,7 @@ describe('historial', () => {
     await game.loadHistory();
 
     expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:5185/api/games/trivia/players/one/stats');
-    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer trivia-token');
+    expect(fetchMock.mock.calls[1][1].headers).toBeUndefined();
     await game.dispose();
   });
 

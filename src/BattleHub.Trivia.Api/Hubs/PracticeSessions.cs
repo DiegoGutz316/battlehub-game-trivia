@@ -2,8 +2,8 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using BattleHub.Trivia.Domain.Entities;
-using BattleHub.Trivia.Domain.Services;
 using BattleHub.Trivia.Domain.Interfaces;
+using BattleHub.Trivia.Domain.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 

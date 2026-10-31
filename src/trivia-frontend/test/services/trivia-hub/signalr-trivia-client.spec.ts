@@ -21,8 +21,6 @@ const mockBuilder = {
 };
 jest.mock('@microsoft/signalr', () => ({ HubConnectionBuilder: jest.fn(() => mockBuilder), LogLevel: { None: 6 } }));
 
-const token = async (): Promise<string> => 'trivia-token';
-
 function track(client: SignalRTriviaClient): HubConnectionState[] {
   const states: HubConnectionState[] = [];
   client.onConnectionStateChanged(state => states.push(state));
@@ -32,16 +30,16 @@ function track(client: SignalRTriviaClient): HubConnectionState[] {
 beforeEach(() => { jest.clearAllMocks(); });
 
 describe('SignalRTriviaClient', () => {
-  it('se conecta a /hubs/trivia con el token de Trivia y reconexión automática', () => {
-    new SignalRTriviaClient('http://localhost:5185', token);
+  it('se conecta a /hubs/trivia sin token y con reconexión automática', () => {
+    new SignalRTriviaClient('http://localhost:5185');
 
-    expect(mockBuilder.withUrl).toHaveBeenCalledWith('http://localhost:5185/hubs/trivia', { accessTokenFactory: token });
+    expect(mockBuilder.withUrl).toHaveBeenCalledWith('http://localhost:5185/hubs/trivia');
     expect(mockBuilder.withAutomaticReconnect).toHaveBeenCalledWith([0, 2000, 5000, 10000]);
     expect(mockBuilder.configureLogging).toHaveBeenCalledWith(6);
   });
 
   it('connect() pasa por connecting y connected', async () => {
-    const client = new SignalRTriviaClient('http://api', token);
+    const client = new SignalRTriviaClient('http://api');
     const states = track(client);
 
     await client.connect();
@@ -52,7 +50,7 @@ describe('SignalRTriviaClient', () => {
 
   it('si el servidor no responde, connect() queda en disconnected y lanza un error legible', async () => {
     mockConnection.start.mockRejectedValueOnce(new Error('ECONNREFUSED'));
-    const client = new SignalRTriviaClient('http://api', token);
+    const client = new SignalRTriviaClient('http://api');
     const states = track(client);
 
     await expect(client.connect()).rejects.toThrow('No se pudo conectar con Trivia');
@@ -60,7 +58,7 @@ describe('SignalRTriviaClient', () => {
   });
 
   it('informa reconexión, recuperación y cierre de la conexión', () => {
-    const client = new SignalRTriviaClient('http://api', token);
+    const client = new SignalRTriviaClient('http://api');
     const states = track(client);
 
     mockLifecycle.reconnecting?.();
@@ -71,9 +69,9 @@ describe('SignalRTriviaClient', () => {
   });
 
   it('invoca JoinMatch y SubmitAnswer con el contrato del hub', async () => {
-    const client = new SignalRTriviaClient('http://api', token);
+    const client = new SignalRTriviaClient('http://api');
 
-    const room = { matchId: 'm1', participants: [{ userId: 'one', displayName: 'Uno' }] };
+    const room = { matchId: 'm1', userId: 'one', participants: [{ userId: 'one', displayName: 'Uno' }] };
     await client.joinMatch(room);
     await client.submitAnswer({ matchId: 'm1', questionId: 'q1', answerId: 'a' });
 
@@ -82,7 +80,7 @@ describe('SignalRTriviaClient', () => {
   });
 
   it('on() registra el evento y la función devuelta lo quita', () => {
-    const client = new SignalRTriviaClient('http://api', token);
+    const client = new SignalRTriviaClient('http://api');
     const handler = jest.fn();
 
     const off = client.on('GameFinished', handler);
@@ -93,7 +91,7 @@ describe('SignalRTriviaClient', () => {
   });
 
   it('deja de avisar a quien canceló su suscripción y disconnect() limpia a todos', async () => {
-    const client = new SignalRTriviaClient('http://api', token);
+    const client = new SignalRTriviaClient('http://api');
     const cancelled = jest.fn();
     const kept = jest.fn();
     const unsubscribe = client.onConnectionStateChanged(cancelled);
