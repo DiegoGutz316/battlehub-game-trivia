@@ -41,7 +41,7 @@ context.events.addEventListener('battlehub:game-finished', event => {
 });
 ```
 
-Cada jugador conectado emite su propio evento, y puede llegar otra vez si el jugador se reconecta. No es un problema: `POST /finish` acepta a cualquier participante y no falla si la sala ya está finalizada.
+Cada jugador conectado emite su propio evento una sola vez, aunque se reconecte. Si recarga la página y vuelve a abrir la partida terminada, es un juego nuevo y emite otra vez. Ninguno de los dos casos es un problema: `POST /finish` acepta a cualquier participante y no falla si la sala ya está finalizada.
 
 ### 3. Ofrecer el modo práctica
 
