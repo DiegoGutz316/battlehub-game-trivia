@@ -2,7 +2,7 @@
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
 import { GameModule } from '../src/game-module';
-import type { GameContext } from '../src/contracts/game-contracts';
+import type { GameContext, PlaygroundContext } from '../src/contracts/game-contracts';
 import type { Player, Question, TriviaHubEventMap, TriviaHubEventName } from '../src/services/trivia-hub/contract';
 import { SignalRTriviaClient } from '../src/services/trivia-hub/signalr-trivia-client';
 
@@ -18,7 +18,7 @@ const mockClient = {
 };
 jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn(() => mockClient) }));
 
-const playground: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'one', displayName: 'Uno' }, mode: 'playground' };
+const playground: PlaygroundContext = { gameType: 'trivia', currentUser: { id: 'one', displayName: 'Uno' }, mode: 'playground' };
 const ctx: GameContext = { matchId: 'match', gameType: 'trivia', currentUser: { id: 'one', displayName: 'Uno' }, participants: [{ userId: 'one', displayName: 'Uno' }] };
 const players: Player[] = [
   { userId: 'one', displayName: 'Uno', score: 0, isConnected: true },

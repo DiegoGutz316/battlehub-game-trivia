@@ -1,13 +1,13 @@
 // Arnés de desarrollo: simula lo que hace el Shell para probar el juego solo (npm start).
 // No forma parte de ./GameModule, así que el Shell nunca lo carga.
 import { GameModule } from '../game-module';
-import type { GameContext } from '../contracts/game-contracts';
+import type { PlaygroundContext } from '../contracts/game-contracts';
 import { readDevContext } from './dev-context';
 
 export class DevShell {
   public static dependencies = [GameModule];
   public game?: GameModule;
-  public readonly context: GameContext = readDevContext(window.location.search);
+  public readonly context: PlaygroundContext = readDevContext(window.location.search);
   /** Mensaje del último rechazo de initialize()/start(); el Shell real lo mostraría como LIFECYCLE_ERROR. */
   public error = '';
 

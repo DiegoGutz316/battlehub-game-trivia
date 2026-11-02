@@ -45,10 +45,10 @@ Cada jugador conectado emite su propio evento, y puede llegar otra vez si el jug
 
 ### 3. Ofrecer el modo práctica
 
-Para abrir el juego sin sala, el Shell usa `mode: 'practice'`. No necesita `matchId` ni `participants`, y el juego arranca solo al llamar a `start()`. Solo debe ofrecerlo a usuarios con acceso al juego.
+Para abrir el juego sin sala, el Shell usa `mode: 'practice'`. El tipo `PracticeContext` no admite `matchId` ni `participants`, y el juego arranca solo al llamar a `start()`. Solo debe ofrecerlo a usuarios con acceso al juego.
 
 ```ts
-const context = {
+const context: PracticeContext = {
   mode: 'practice',
   gameType: 'trivia',
   currentUser: { id: user.id, displayName: user.displayName },
