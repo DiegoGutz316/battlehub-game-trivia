@@ -1,7 +1,7 @@
 ﻿import { customElement } from 'aurelia';
 import template from './game-module.html';
 import './game-module.css';
-import { GAME_FINISHED_EVENT, type GameContext, type GameFinishedDetail, type GameMode, type GameModule as IGameModule } from './contracts/game-contracts';
+import { GAME_FINISHED_EVENT, type GameFinishedDetail, type GameLaunchContext, type GameMode, type GameModule as IGameModule } from './contracts/game-contracts';
 import type { TriviaHubClient, Unsubscribe } from './services/trivia-hub/trivia-hub-client';
 import { SignalRTriviaClient } from './services/trivia-hub/signalr-trivia-client';
 import { PracticeTriviaClient } from './services/trivia-hub/practice-trivia-client';
@@ -15,7 +15,7 @@ const apiUrl = process.env.TRIVIA_API_URL!.replace(/\/$/, '');
 
 @customElement({ name: 'trivia-game-module', template })
 export class GameModule implements IGameModule {
-  public context: GameContext | null = null;
+  public context: GameLaunchContext | null = null;
   public state: GameState = 'created';
   public phase: GamePhase = 'waiting';
   public players: Player[] = [];
@@ -42,7 +42,7 @@ export class GameModule implements IGameModule {
   private joined = false;
   private readonly abort = new AbortController();
 
-  public async initialize(context: GameContext): Promise<void> {
+  public async initialize(context: GameLaunchContext): Promise<void> {
     if (this.state === 'disposed') throw new Error('El juego ya fue liberado con dispose()');
     const mode = context?.mode ?? 'match';
     if (context?.gameType !== 'trivia' || !context.currentUser?.id || (mode === 'match' && !context.matchId))
@@ -55,11 +55,13 @@ export class GameModule implements IGameModule {
     this.state = 'initialized';
   }
   public get soloTitle(): string { return this.mode === 'practice' ? 'Modo práctica' : 'Modo playground'; }
+  /** Sala de la partida. Sin sala queda vacío: el cliente de práctica no lo usa. */
+  private get matchId(): string { return this.context?.matchId ?? ''; }
   private live(): boolean { return this.state !== 'disposed'; }
   private async join(): Promise<void> {
     const context = this.context;
     if (!context || !this.live()) return;
-    await this.client!.joinMatch({ matchId: context.matchId, userId: context.currentUser.id, participants: context.participants ?? [] });
+    await this.client!.joinMatch({ matchId: this.matchId, userId: context.currentUser.id, participants: context.participants ?? [] });
     this.joined = true;
   }
   private subscribe(client: TriviaHubClient): void {
@@ -102,7 +104,7 @@ export class GameModule implements IGameModule {
   // R-46: el juego solo avisa al Shell; es el Shell quien notifica a Matchmaking. Sin sala no hay nada que avisar.
   private notifyFinished(): void {
     if (this.mode !== 'match' || !this.context) return;
-    const detail: GameFinishedDetail = { matchId: this.context.matchId, gameType: this.context.gameType };
+    const detail: GameFinishedDetail = { matchId: this.matchId, gameType: this.context.gameType };
     this.context.events?.dispatchEvent(new CustomEvent(GAME_FINISHED_EVENT, { detail }));
   }
   private markConnected(id: string, connected: boolean): void {
@@ -159,7 +161,7 @@ export class GameModule implements IGameModule {
   public async answer(answerId: string): Promise<void> {
     if (this.state !== 'running' || this.phase !== 'playing' || this.connection !== 'connected' || this.answered || this.submitting || this.seconds <= 0 || !this.question || !this.context) return;
     this.submitting = true; this.error = '';
-    try { await this.client!.submitAnswer({ matchId: this.context.matchId, questionId: this.question.questionId, answerId }); }
+    try { await this.client!.submitAnswer({ matchId: this.matchId, questionId: this.question.questionId, answerId }); }
     catch { if (this.live()) this.error = 'La respuesta no fue confirmada. Revisa el tiempo y tu conexión.'; }
     finally { this.submitting = false; }
   }

@@ -2,10 +2,9 @@
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
 import { GameModule } from '../src/game-module';
-import type { GameContext } from '../src/contracts/game-contracts';
+import type { GameContext, PlaygroundContext } from '../src/contracts/game-contracts';
 
-const ctx: GameContext = {
-  matchId: 'match-001',
+const ctx: PlaygroundContext = {
   gameType: 'trivia',
   currentUser: { id: 'user-001', displayName: 'Francisco' },
   mode: 'playground',
@@ -92,8 +91,27 @@ describe('GameModule (contrato ADR-003)', () => {
     await component.game.start();
     await tasksSettled();
 
-    expect(getBy('[data-testid="match-id"]')?.textContent).toBe('match-001');
+    expect(getBy('[data-testid="match-id"]')?.textContent).toBe('');
     expect(getBy('[data-testid="player-name"]')?.textContent).toBe('Francisco');
     expect(getBy('[data-testid="game-state"]')?.textContent).toBe('running');
+  });
+
+  it('en una partida muestra la sala recibida', async () => {
+    const { component, getBy } = await createFixture(
+      '<trivia-game-module component.ref="game"></trivia-game-module>',
+      class { public game!: GameModule; },
+      [GameModule],
+    ).started;
+    const match: GameContext = {
+      matchId: 'match-001',
+      gameType: 'trivia',
+      currentUser: ctx.currentUser,
+      participants: [{ userId: 'user-001', displayName: 'Francisco' }],
+    };
+
+    await component.game.initialize(match);
+    await tasksSettled();
+
+    expect(getBy('[data-testid="match-id"]')?.textContent).toBe('match-001');
   });
 });

@@ -1,19 +1,18 @@
 import { readDevContext } from '../../src/dev/dev-context';
 
 describe('readDevContext', () => {
-  it('sin parámetros usa la partida y el jugador por defecto', () => {
+  it('sin parámetros usa el jugador por defecto', () => {
     expect(readDevContext('')).toEqual({
-      matchId: 'match-dev-001',
       gameType: 'trivia',
       mode: 'playground',
       currentUser: { id: 'user-dev-1', displayName: 'Jugador 1' },
     });
   });
 
-  it('toma la partida y el jugador de la URL', () => {
+  it('toma el jugador de la URL y no crea una sala aunque traiga matchId', () => {
     const context = readDevContext('?matchId=match-7&userId=user-dev-2&displayName=Jugador%202');
 
-    expect(context.matchId).toBe('match-7');
+    expect(context).not.toHaveProperty('matchId');
     expect(context.currentUser).toEqual({ id: 'user-dev-2', displayName: 'Jugador 2' });
   });
 

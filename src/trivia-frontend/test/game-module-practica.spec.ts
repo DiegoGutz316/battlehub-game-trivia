@@ -2,7 +2,7 @@
 import { createFixture } from '@aurelia/testing';
 import { tasksSettled } from '@aurelia/runtime';
 import { GameModule } from '../src/game-module';
-import { GAME_FINISHED_EVENT, type GameContext } from '../src/contracts/game-contracts';
+import { GAME_FINISHED_EVENT, type GameContext, type GameLaunchContext, type PlaygroundContext, type PracticeContext } from '../src/contracts/game-contracts';
 import type { Question, TriviaHubEventMap, TriviaHubEventName } from '../src/services/trivia-hub/contract';
 import { PracticeTriviaClient } from '../src/services/trivia-hub/practice-trivia-client';
 import { SignalRTriviaClient } from '../src/services/trivia-hub/signalr-trivia-client';
@@ -37,9 +37,9 @@ function mockCreateClient(): MockClient {
 jest.mock('../src/services/trivia-hub/practice-trivia-client', () => ({ PracticeTriviaClient: jest.fn(() => mockCreateClient()) }));
 jest.mock('../src/services/trivia-hub/signalr-trivia-client', () => ({ SignalRTriviaClient: jest.fn() }));
 
-const withoutShell: GameContext = { matchId: 'match-dev-001', gameType: 'trivia', currentUser: { id: 'user-dev-1', displayName: 'Jugador 1' }, mode: 'playground' };
+const withoutShell: PlaygroundContext = { gameType: 'trivia', currentUser: { id: 'user-dev-1', displayName: 'Jugador 1' }, mode: 'playground' };
 const fromRoom: GameContext = { matchId: 'sala', gameType: 'trivia', currentUser: withoutShell.currentUser, participants: [{ userId: 'user-dev-1', displayName: 'Jugador 1' }] };
-const practice: GameContext = { matchId: '', gameType: 'trivia', currentUser: withoutShell.currentUser, mode: 'practice' };
+const practice: PracticeContext = { gameType: 'trivia', currentUser: withoutShell.currentUser, mode: 'practice' };
 const now = (): string => new Date().toISOString();
 const question: Question = {
   questionId: 'q1', questionNumber: 1, totalQuestions: 10, text: '¿Qué lenguaje usa Aurelia?', category: 'Tecnología',
@@ -60,7 +60,7 @@ const finished = (score: number, correctAnswers: number): TriviaHubEventMap['Gam
   players: [{ userId: 'user-dev-1', displayName: 'Jugador 1', score, correctAnswers, correctAnswersTimeMs: 0, position: 1 }],
 });
 
-async function render(context: GameContext = withoutShell) {
+async function render(context: GameLaunchContext = withoutShell) {
   const fixture = await createFixture('<trivia-game-module component.ref="game"></trivia-game-module>', class { public game!: GameModule; }, [GameModule]).started;
   const game = fixture.component.game;
   await game.initialize(context);
@@ -87,7 +87,7 @@ describe('modo playground (sin el Shell)', () => {
 
       expect(PracticeTriviaClient).toHaveBeenCalledWith('http://localhost:5185', withoutShell.currentUser);
       expect(SignalRTriviaClient).not.toHaveBeenCalled();
-      expect(latest().joinMatch).toHaveBeenCalledWith({ matchId: 'match-dev-001', userId: 'user-dev-1', participants: [] });
+      expect(latest().joinMatch).toHaveBeenCalledWith({ matchId: '', userId: 'user-dev-1', participants: [] });
       expect(game.solo).toBe(true);
       expect(game.state).toBe('running');
       expect(fixture.appHost.querySelector('[data-testid="solo-badge"]')?.textContent).toContain('no se guarda en tu historial');
@@ -103,7 +103,7 @@ describe('modo playground (sin el Shell)', () => {
       expect(option.disabled).toBe(false);
 
       await game.answer('a');
-      expect(latest().submitAnswer).toHaveBeenCalledWith({ matchId: 'match-dev-001', questionId: 'q1', answerId: 'a' });
+      expect(latest().submitAnswer).toHaveBeenCalledWith({ matchId: '', questionId: 'q1', answerId: 'a' });
       emit('AnswerReceived', { questionId: 'q1', answerId: 'a', receivedAtUtc: now() });
       await tasksSettled();
       expect(option.disabled).toBe(true);
@@ -274,7 +274,7 @@ describe('modo práctica (desde el Shell, sin sala)', () => {
     const finishedEvent = jest.fn();
     const events = new EventTarget();
     events.addEventListener(GAME_FINISHED_EVENT, finishedEvent);
-    const fromShell = { mode: 'practice', gameType: 'trivia', currentUser: practice.currentUser, events } as unknown as GameContext;
+    const fromShell: PracticeContext = { mode: 'practice', gameType: 'trivia', currentUser: practice.currentUser, events };
     const { game, text, fixture } = await render(fromShell);
     try {
       await game.start();

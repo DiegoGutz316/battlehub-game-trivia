@@ -1,14 +1,13 @@
-import type { GameContext } from '../contracts/game-contracts';
+import type { PlaygroundContext } from '../contracts/game-contracts';
 
 /**
  * Contexto del modo playground: el juego abierto por sí solo, sin el Shell (R-34).
  * El nombre del jugador se puede cambiar por la URL:
  *   http://localhost:4002/?displayName=Jugador%202
  */
-export function readDevContext(search: string): GameContext {
+export function readDevContext(search: string): PlaygroundContext {
   const params = new URLSearchParams(search);
   return {
-    matchId: params.get('matchId') || 'match-dev-001',
     gameType: 'trivia',
     mode: 'playground',
     currentUser: {

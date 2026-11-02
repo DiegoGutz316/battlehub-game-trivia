@@ -76,7 +76,7 @@ it('joins again to get a fresh snapshot after reconnecting', async () => {
   await game.dispose();
 });
 it('refuses a match without the room players or without the current player', async () => {
-  await expect(new GameModule().initialize({ ...ctx, participants: undefined })).rejects.toThrow('jugadores de la sala');
+  await expect(new GameModule().initialize({ ...ctx, participants: undefined } as unknown as GameContext)).rejects.toThrow('jugadores de la sala');
   await expect(new GameModule().initialize({ ...ctx, participants: [room[1]] })).rejects.toThrow('jugadores de la sala');
 });
 it('tells the Shell through context.events when the match ends, and only the Shell talks to Matchmaking', async () => {
