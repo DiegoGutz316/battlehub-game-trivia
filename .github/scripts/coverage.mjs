@@ -8,6 +8,7 @@
 //   COVERAGE_THRESHOLD  porcentaje mínimo de líneas (por defecto 85)
 //   ENFORCE_COVERAGE    "true" hace fallar el job si no se alcanza el mínimo; con otro valor solo avisa
 //   HEAD_SHA            commit que se informa en el comentario
+//   BACKEND_STATE y FRONTEND_STATE  por qué esa parte no tiene reporte: "unchanged" o "running"
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 export const MARKER = '<!-- trivia-coverage-report -->';
@@ -16,6 +17,7 @@ const threshold = Number(process.env.COVERAGE_THRESHOLD ?? 85);
 const enforce = process.env.ENFORCE_COVERAGE === 'true';
 
 const LABELS = { backend: 'Backend (.NET)', frontend: 'Frontend (Aurelia)' };
+const STATES = { unchanged: '➖ Sin cambios', running: '⏳ En curso' };
 
 export function readSummary(kind, file) {
   if (!file || !existsSync(file)) return null;
@@ -38,16 +40,16 @@ export function readSummary(kind, file) {
 
 const pct = value => (value == null ? '—' : `${value.toFixed(1).replace('.', ',')} %`);
 
-function status(result) {
-  if (!result) return '❔ Sin reporte';
+function status(result, state) {
+  if (!result) return STATES[state] ?? '❔ Sin reporte';
   if (result.lines >= threshold) return '✅ Cumple';
   return enforce ? `❌ Bajo el ${threshold} %` : `⚠️ Bajo el ${threshold} %`;
 }
 
-export function buildComment(backend, frontend, sha = '') {
+export function buildComment(backend, frontend, sha = '', states = {}) {
   const row = (kind, r) => r
     ? `| ${LABELS[kind]} | ${pct(r.lines)} (${r.covered}/${r.total}) | ${pct(r.branches)} | ${status(r)} |`
-    : `| ${LABELS[kind]} | — | — | ${status(r)} |`;
+    : `| ${LABELS[kind]} | — | — | ${status(r, states[kind])} |`;
   const lines = [
     MARKER,
     '## Cobertura de código',
@@ -95,7 +97,8 @@ if (command === 'check') {
   check(args[0], args[1]);
 } else if (command === 'comment') {
   const [backendFile, frontendFile, output] = args;
-  writeFileSync(output, buildComment(readSummary('backend', backendFile), readSummary('frontend', frontendFile), process.env.HEAD_SHA ?? ''));
+  const states = { backend: process.env.BACKEND_STATE, frontend: process.env.FRONTEND_STATE };
+  writeFileSync(output, buildComment(readSummary('backend', backendFile), readSummary('frontend', frontendFile), process.env.HEAD_SHA ?? '', states));
   console.log(`Comentario escrito en ${output}`);
 } else if (command) {
   console.error(`Comando desconocido: ${command}`);
