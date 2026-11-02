@@ -1,4 +1,5 @@
 # Actualiza el comentario de cobertura del PR cuando termina CI Backend o CI Frontend.
+# Cada flujo sube solo su reporte, así que aquí se buscan los dos en el mismo commit.
 name: CI Coverage Comment
 
 on:
@@ -11,6 +12,10 @@ permissions:
   pull-requests: write
   actions: read
 
+# Si los dos flujos terminan a la vez, el segundo comentario espera al primero y ya ve ambos reportes.
+concurrency:
+  group: coverage-comment-${{ github.event.workflow_run.head_sha }}
+
 jobs:
   coverage-comment:
     name: coverage-comment
@@ -21,15 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          pattern: coverage-*
-          path: coverage
-
       - name: Resolve PR
         id: pr
         uses: actions/github-script@v9
@@ -39,7 +35,6 @@ jobs:
             const prs = run.pull_requests || [];
             if (prs.length > 0) {
               core.setOutput('number', String(prs[0].number));
-              core.setOutput('sha', prs[0].head.sha);
               return;
             }
             const { owner, repo } = context.repo;
@@ -52,12 +47,57 @@ jobs:
               return;
             }
             core.setOutput('number', String(pulls.data[0].number));
-            core.setOutput('sha', pulls.data[0].head.sha);
+
+      - name: Find coverage reports
+        id: reports
+        if: steps.pr.outputs.number != ''
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner, repo, event: 'pull_request', head_sha: context.payload.workflow_run.head_sha, per_page: 100
+            });
+            for (const [part, workflow] of [['backend', 'CI Backend'], ['frontend', 'CI Frontend']]) {
+              // La API entrega primero la ejecución más reciente.
+              const flow = data.workflow_runs.find(run => run.name === workflow);
+              if (!flow) continue;
+              const { data: found } = await github.rest.actions.listWorkflowRunArtifacts({
+                owner, repo, run_id: flow.id, name: `coverage-${part}`
+              });
+              if (found.artifacts.some(artifact => !artifact.expired)) core.setOutput(`${part}-run`, String(flow.id));
+              else if (flow.status !== 'completed') core.setOutput(`${part}-state`, 'running');
+              // Un flujo exitoso sin reporte omitió sus pruebas porque esa parte no cambió.
+              else if (flow.conclusion === 'success') core.setOutput(`${part}-state`, 'unchanged');
+            }
+
+      # Con `name`, la acción deja el archivo en `path`. Con `pattern` y un solo reporte no crea la subcarpeta.
+      - name: Download backend coverage
+        if: steps.reports.outputs.backend-run != ''
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          run-id: ${{ steps.reports.outputs.backend-run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: coverage-backend
+          path: coverage/coverage-backend
+
+      - name: Download frontend coverage
+        if: steps.reports.outputs.frontend-run != ''
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          run-id: ${{ steps.reports.outputs.frontend-run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: coverage-frontend
+          path: coverage/coverage-frontend
 
       - name: Build comment markdown
-        if: steps.pr.outputs.number != '' && hashFiles('coverage/**') != ''
+        if: steps.pr.outputs.number != ''
         env:
-          HEAD_SHA: ${{ steps.pr.outputs.sha }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          BACKEND_STATE: ${{ steps.reports.outputs.backend-state }}
+          FRONTEND_STATE: ${{ steps.reports.outputs.frontend-state }}
           COVERAGE_THRESHOLD: "85"
           ENFORCE_COVERAGE: "true"
         run: |
