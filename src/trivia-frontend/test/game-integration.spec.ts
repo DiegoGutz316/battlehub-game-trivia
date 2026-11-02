@@ -98,6 +98,19 @@ it('tells the Shell through context.events when the match ends, and only the She
     await game.dispose();
   } finally { window.removeEventListener(GAME_FINISHED_EVENT, onWindow); globalThis.fetch = previous; }
 });
+it('tells the Shell only once when the server resends the end of the match after a reconnection', async () => {
+  const finished = jest.fn();
+  const events = new EventTarget();
+  events.addEventListener(GAME_FINISHED_EVENT, finished);
+  const game = new GameModule(); await game.initialize({ ...ctx, events }); await game.start();
+  const end = { matchId: 'match', players: [], winnerUserId: 'player-one', isTie: false, decidedByTiebreak: false, finishedAtUtc: new Date().toISOString() };
+  emit('GameFinished', end);
+  emit('GameFinished', end);
+  expect(finished).toHaveBeenCalledTimes(1);
+  expect(game.phase).toBe('finished');
+  expect(game.result).toEqual(end);
+  await game.dispose();
+});
 it('unsubscribes and clears the countdown after disposal', async () => {
   jest.useFakeTimers();
   const game = new GameModule(); await game.initialize(ctx); await game.start();

@@ -88,7 +88,8 @@ export class GameModule implements IGameModule {
       client.on('PlayerJoined', data => { this.markConnected(data.userId, true); }),
       client.on('PlayerReconnected', data => { this.markConnected(data.userId, true); }),
       client.on('PlayerDisconnected', data => { this.markConnected(data.userId, false); }),
-      client.on('GameFinished', data => { this.phase = 'finished'; this.result = data; this.notifyFinished(); }),
+      // El servidor reenvía GameFinished a quien se reconecta: al Shell se le avisa una sola vez.
+      client.on('GameFinished', data => { const first = !this.result; this.phase = 'finished'; this.result = data; if (first) this.notifyFinished(); }),
       client.on('GameError', data => { this.error = data.message; }),
       client.onConnectionStateChanged(state => {
         this.connection = state;
