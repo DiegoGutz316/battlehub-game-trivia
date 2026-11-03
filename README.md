@@ -96,6 +96,103 @@ Problemas frecuentes:
 | Login de SQL falla | La contraseña de `ConnectionStrings__Trivia` debe ser la misma que `MSSQL_SA_PASSWORD`. |
 | El frontend no habla con la API | `TRIVIA_API_URL` debe ser la URL del **navegador** (`http://localhost:5185`), no el nombre del servicio Docker. Hay que reconstruir el frontend si se cambia. |
 
+## Ejemplos de uso de la API con curl
+
+Con Compose (o la API en local) la base es `http://localhost:5185`. El juego **no** usa Auth0: estos `GET`/`POST` no llevan token.
+
+### Salud de la API
+
+```bash
+curl -s -i http://localhost:5185/health
+```
+
+Respuesta esperada: `HTTP/1.1 200 OK` y el cuerpo `Healthy`.
+
+### Estadísticas de un jugador
+
+Si el jugador no tiene partidas, igual responde `200` con ceros.
+
+```bash
+curl -s "http://localhost:5185/api/games/trivia/players/user-demo/stats"
+```
+
+```json
+{
+  "userId": "user-demo",
+  "matchesPlayed": 0,
+  "wins": 0,
+  "averageScore": 0,
+  "bestScore": 0
+}
+```
+
+### Historial de partidas
+
+```bash
+curl -s "http://localhost:5185/api/games/trivia/players/user-demo/history"
+```
+
+Arreglo de resultados (el más reciente primero). Sin partidas: `[]`.
+
+### Resultado de una partida
+
+```bash
+curl -s -i "http://localhost:5185/api/games/trivia/results/match-demo-001"
+```
+
+- `200` y JSON si esa partida existe.
+- `404` si no hay un resultado con ese `matchId`.
+
+### Guardar un resultado
+
+```bash
+curl -s -i -X POST "http://localhost:5185/api/games/trivia/results" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matchId": "match-demo-001",
+    "gameType": "trivia",
+    "startedAt": "2026-10-29T18:00:00Z",
+    "finishedAt": "2026-10-29T18:10:00Z",
+    "winnerUserId": "user-a",
+    "isTie": false,
+    "decidedByTiebreak": false,
+    "metadata": {},
+    "players": [
+      {
+        "userId": "user-a",
+        "displayName": "Ana",
+        "score": 300,
+        "correctAnswers": 7,
+        "correctAnswersTimeMs": 45000,
+        "position": 1
+      },
+      {
+        "userId": "user-b",
+        "displayName": "Bruno",
+        "score": 150,
+        "correctAnswers": 4,
+        "correctAnswersTimeMs": 52000,
+        "position": 2
+      }
+    ]
+  }'
+```
+
+Respuesta esperada: `201 Created` con el mismo resultado en el cuerpo. Si `matchId` ya existe: `409 Conflict`. Cuerpo inválido: `400 Bad Request`.
+
+Después del `POST`, los `GET` de stats, historial y resultado de `match-demo-001` ya no van vacíos.
+
+### Qué no hay como REST
+
+No hay `GET` de preguntas ni de categorías: el banco vive en SQL Server y se entrega por **SignalR** durante la partida. Eso no se prueba con `curl`.
+
+| Hub | Ruta | Uso |
+|---|---|---|
+| Partida con el Shell | `/hubs/trivia` | Sala con los jugadores que entrega el Shell |
+| Práctica / playground | `/hubs/trivia/practice` | Un solo jugador, sin historial |
+
+Para ver una partida: frontend en [http://localhost:4002](http://localhost:4002) (botón **Jugar en modo playground**).
+
 ## Cómo correr localmente (sin Compose)
 
 ### Backend (.NET 10)
