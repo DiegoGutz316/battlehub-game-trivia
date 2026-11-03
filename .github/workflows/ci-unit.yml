@@ -31,6 +31,8 @@ on:
       - ".editorconfig"
       - "dotnet-tools.json"
       - ".github/workflows/ci-unit.yml"
+  # R-54: ejecución manual desde la pestaña Actions; corre todo sin mirar qué cambió.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -66,7 +68,7 @@ jobs:
   backend-unit:
     name: backend-unit
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -88,7 +90,7 @@ jobs:
   frontend-unit:
     name: frontend-unit
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -123,11 +125,12 @@ jobs:
       - name: Evaluate required unit checks
         run: |
           fail=0
-          if [ "${{ needs.changes.outputs.backend }}" = "true" ] && [ "${{ needs.backend-unit.result }}" != "success" ]; then
+          manual="${{ github.event_name == 'workflow_dispatch' }}"
+          if { [ "$manual" = "true" ] || [ "${{ needs.changes.outputs.backend }}" = "true" ]; } && [ "${{ needs.backend-unit.result }}" != "success" ]; then
             echo "backend-unit failed or was cancelled"
             fail=1
           fi
-          if [ "${{ needs.changes.outputs.frontend }}" = "true" ] && [ "${{ needs.frontend-unit.result }}" != "success" ]; then
+          if { [ "$manual" = "true" ] || [ "${{ needs.changes.outputs.frontend }}" = "true" ]; } && [ "${{ needs.frontend-unit.result }}" != "success" ]; then
             echo "frontend-unit failed or was cancelled"
             fail=1
           fi
