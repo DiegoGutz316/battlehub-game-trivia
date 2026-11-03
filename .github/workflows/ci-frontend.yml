@@ -9,6 +9,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # R-54: ejecución manual desde la pestaña Actions; corre todo sin mirar qué cambió.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -40,7 +42,7 @@ jobs:
   frontend:
     name: frontend
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -79,7 +81,7 @@ jobs:
   frontend-docker:
     name: frontend-docker
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
