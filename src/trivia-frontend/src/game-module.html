@@ -6,7 +6,7 @@
     </header>
     <p if.bind="solo" class="trivia-game-practice" data-testid="solo-badge">${soloTitle} · Juegas solo y esta partida no se guarda en tu historial ni en tus estadísticas.</p>
     <p if.bind="error" class="trivia-game-error" role="alert">${error}</p>
-    <p if.bind="state === 'paused'" class="trivia-game-notice">La vista está pausada. ${solo ? 'La partida' : 'La partida compartida'} continúa en el servidor.</p>
+    <p if.bind="state === 'paused'" class="trivia-game-notice" data-testid="pause-notice">${pauseNotice}</p>
     <p if.bind="(mode === 'match' || solo) && connection !== 'connected'" class="trivia-game-notice" aria-live="polite">Conexión: ${connection}. Las respuestas se habilitarán cuando estés conectado.</p>
     <div class="trivia-game-layout">
       <main class="trivia-game-panel">

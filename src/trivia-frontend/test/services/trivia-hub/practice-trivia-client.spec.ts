@@ -196,6 +196,56 @@ describe('PracticeTriviaClient', () => {
     }) });
   });
 
+  const moved = { ...question(), expiresAtUtc: '2026-10-25T18:05:10.000Z', serverTimeUtc: '2026-10-25T18:05:00.000Z' };
+  const state = (paused: boolean) => ({
+    matchId: 'practice-1', phase: 'playing', paused, questionNumber: 1, totalQuestions: 10, totalScore: 0, correctAnswers: 0,
+    currentQuestion: moved, review: null, serverTimeUtc: moved.serverTimeUtc,
+  });
+
+  it('pause() y resume() detienen y reanudan el tiempo con la clave; resume() muestra la pregunta con su nuevo plazo', async () => {
+    const { client, events } = await startedClient();
+
+    await client.pause();
+    expect(mockConnection.invoke).toHaveBeenLastCalledWith('PausePractice', 'practice-1', 'ABCDEF');
+
+    mockConnection.invoke.mockResolvedValueOnce(state(false));
+    await client.resume();
+
+    expect(mockConnection.invoke).toHaveBeenLastCalledWith('ResumePractice', 'practice-1', 'ABCDEF');
+    expect(events.at(-1)).toEqual({ name: 'CurrentState', data: expect.objectContaining({
+      phase: 'playing', serverTimeUtc: moved.serverTimeUtc, currentQuestion: { ...moved, hasAnswered: false, selectedAnswerId: null },
+    }) });
+  });
+
+  it('antes de empezar la partida, pause() y resume() no llaman al servidor', async () => {
+    const client = new PracticeTriviaClient('http://api', player);
+
+    await client.pause();
+    await client.resume();
+
+    expect(mockConnection.invoke).not.toHaveBeenCalled();
+  });
+
+  it('al reconectar, si el servidor sigue en pausa pero el jugador ya reanudó, reanuda la partida', async () => {
+    const { client, events } = await startedClient();
+    mockConnection.invoke.mockResolvedValueOnce(state(true)).mockResolvedValueOnce(state(false));
+
+    await client.joinMatch();
+
+    expect(mockConnection.invoke).toHaveBeenLastCalledWith('ResumePractice', 'practice-1', 'ABCDEF');
+    expect(events.at(-1)).toEqual({ name: 'CurrentState', data: expect.objectContaining({ serverTimeUtc: moved.serverTimeUtc }) });
+  });
+
+  it('al reconectar con la partida en pausa, la deja en pausa', async () => {
+    const { client } = await startedClient();
+    await client.pause();
+    mockConnection.invoke.mockResolvedValueOnce(state(true));
+
+    await client.joinMatch();
+
+    expect(mockConnection.invoke).toHaveBeenLastCalledWith('ReconnectPractice', 'practice-1', 'ABCDEF');
+  });
+
   it('on() devuelve una función que quita al suscriptor', async () => {
     const client = new PracticeTriviaClient('http://api', player);
     const handler = jest.fn();

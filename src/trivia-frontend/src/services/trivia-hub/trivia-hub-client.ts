@@ -10,6 +10,9 @@ export interface TriviaHubClient {
   disconnect(): Promise<void>;
   joinMatch(request: JoinMatchRequest): Promise<void>;
   submitAnswer(request: SubmitAnswerRequest): Promise<void>;
+  /** Solo las partidas de un solo jugador: detienen y reanudan el tiempo en el servidor. Una sala es compartida y no se pausa. */
+  pause?(): Promise<void>;
+  resume?(): Promise<void>;
   on<E extends TriviaHubEventName>(event: E, handler: HubEventHandler<E>): Unsubscribe;
   onConnectionStateChanged(handler: (state: HubConnectionState) => void): Unsubscribe;
 }

@@ -14,6 +14,8 @@ interface MockClient {
   disconnect: jest.Mock<Promise<void>, []>;
   joinMatch: jest.Mock<Promise<void>, unknown[]>;
   submitAnswer: jest.Mock<Promise<void>, unknown[]>;
+  pause: jest.Mock<Promise<void>, []>;
+  resume: jest.Mock<Promise<void>, []>;
 }
 const mockClients: MockClient[] = [];
 function mockCreateClient(): MockClient {
@@ -25,6 +27,8 @@ function mockCreateClient(): MockClient {
     disconnect: jest.fn(async () => undefined),
     joinMatch: jest.fn(async () => undefined),
     submitAnswer: jest.fn(async () => undefined),
+    pause: jest.fn(async () => undefined),
+    resume: jest.fn(async () => undefined),
     on: jest.fn((name: string, handler: (data: never) => void) => { handlers.set(name, handler); return () => handlers.delete(name); }),
     onConnectionStateChanged: jest.fn((handler: (state: string) => void) => {
       client.setState = handler;
@@ -296,6 +300,110 @@ describe('modo práctica (desde el Shell, sin sala)', () => {
 
     expect(game.state).toBe('running');
     expect(mockClients).toHaveLength(1);
+    await game.dispose();
+  });
+});
+
+// R-35: sin sala, pause() detiene el tiempo en el servidor y start() lo reanuda.
+describe('pausa sin sala', () => {
+  const playing = (ms: number): TriviaHubEventMap['CurrentState'] => ({
+    matchId: 'practice-1', phase: 'playing', serverTimeUtc: now(), totalQuestions: 10, lastQuestionResult: null,
+    players: [{ userId: 'user-dev-1', displayName: 'Jugador 1', score: 0, isConnected: true }],
+    currentQuestion: { ...question, expiresAtUtc: new Date(Date.now() + ms).toISOString(), hasAnswered: false, selectedAnswerId: null },
+  });
+  async function practicing(): Promise<GameModule> {
+    const game = new GameModule();
+    await game.initialize(practice);
+    await game.start();
+    emit('CurrentState', playing(15000));
+    return game;
+  }
+
+  it('pausar detiene el tiempo en el servidor, congela el contador y no deja responder', async () => {
+    const { game, text, button, fixture } = await render();
+    try {
+      await game.playSolo();
+      emit('CurrentState', playing(15000));
+      await game.pause();
+
+      expect(latest().pause).toHaveBeenCalledTimes(1);
+      expect(game.timeStopped).toBe(true);
+      expect(await text()).toContain('Partida en pausa: el tiempo está detenido.');
+      const frozen = game.seconds;
+      emit('CurrentState', playing(3000));
+      expect(game.seconds).toBe(frozen);
+      expect((await button('TypeScript'))?.disabled).toBe(true);
+      await game.answer('a');
+      expect(latest().submitAnswer).not.toHaveBeenCalled();
+    } finally { await game.dispose(); await fixture.stop(true); }
+  });
+
+  it('start() reanuda en el servidor y el contador sigue desde el nuevo plazo', async () => {
+    const game = await practicing();
+    await game.pause();
+    latest().resume.mockImplementationOnce(async () => { emit('CurrentState', playing(8000)); });
+
+    await game.start();
+
+    expect(latest().resume).toHaveBeenCalledTimes(1);
+    expect(game.state).toBe('running');
+    expect(game.timeStopped).toBe(false);
+    expect(game.seconds).toBe(8);
+    await game.dispose();
+  });
+
+  it('si el servidor no puede pausar, avisa que la partida sigue y no lanza el error', async () => {
+    const { game, text, fixture } = await render(practice);
+    try {
+      await game.start();
+      emit('CurrentState', playing(15000));
+      latest().pause.mockRejectedValueOnce(new Error('caído'));
+
+      await expect(game.pause()).resolves.toBeUndefined();
+
+      expect(game.state).toBe('paused');
+      expect(game.timeStopped).toBe(false);
+      expect(game.error).toContain('No se pudo detener el tiempo');
+      expect(await text()).toContain('La partida continúa en el servidor.');
+    } finally { await game.dispose(); await fixture.stop(true); }
+  });
+
+  it('si el servidor no puede reanudar, avisa y vuelve a jugar sin lanzar el error', async () => {
+    const game = await practicing();
+    await game.pause();
+    latest().resume.mockRejectedValueOnce(new Error('caído'));
+
+    await expect(game.start()).resolves.toBeUndefined();
+
+    expect(game.state).toBe('running');
+    expect(game.error).toContain('No se pudo reanudar la partida');
+    await game.dispose();
+  });
+
+  it('si start() llega mientras se pausa, el servidor no queda detenido', async () => {
+    const game = await practicing();
+    let release!: () => void;
+    latest().pause.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+
+    const pausing = game.pause();
+    await game.start();
+    release();
+    await pausing;
+
+    expect(latest().resume).toHaveBeenCalledTimes(1);
+    expect(game.state).toBe('running');
+    expect(game.timeStopped).toBe(false);
+    await game.dispose();
+  });
+
+  it('con la partida terminada, pausar no llama al servidor', async () => {
+    const game = await practicing();
+    emit('GameFinished', finished(500, 3));
+
+    await game.pause();
+
+    expect(latest().pause).not.toHaveBeenCalled();
+    expect(game.timeStopped).toBe(false);
     await game.dispose();
   });
 });

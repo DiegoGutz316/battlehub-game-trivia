@@ -72,6 +72,13 @@ El tiempo utilizado para resolver el desempate es calculado por el servidor.
 
 Si los jugadores continúan empatados después de aplicar este criterio, la partida finaliza en empate.
 
+## Pausa
+
+El Shell pausa el juego con `pause()` y lo reanuda con `start()`.
+
+- **Práctica y playground:** la pausa detiene el tiempo en el servidor. Ni la pregunta ni la revisión avanzan y no se puede responder. Al reanudar, la partida sigue con el tiempo que quedaba, y el puntaje no cuenta el tiempo en pausa. Una pausa de más de 30 minutos se descarta.
+- **Partida con sala:** la pausa solo detiene la vista de ese jugador. La partida es compartida y continúa para los demás, igual que con una desconexión.
+
 ## Desconexiones y reconexiones
 
 La desconexión de un jugador no pausa la partida.

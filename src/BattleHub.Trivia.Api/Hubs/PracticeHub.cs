@@ -44,11 +44,7 @@ public sealed class PracticeHub(
 
 
 
-    public async Task<object> SubmitPracticeAnswer(
-        string matchId,
-        string secret,
-        string questionId,
-        string answerId)
+    private void EnsureJoined(string matchId)
     {
         if (!Context.Items.TryGetValue("practice", out var currentMatch)
             || currentMatch is not string activeMatchId
@@ -56,6 +52,15 @@ public sealed class PracticeHub(
         {
             throw new HubException("PRACTICE_NOT_JOINED");
         }
+    }
+
+    public async Task<object> SubmitPracticeAnswer(
+        string matchId,
+        string secret,
+        string questionId,
+        string answerId)
+    {
+        EnsureJoined(matchId);
 
         return await sessions.AnswerAsync(
             matchId,
@@ -63,6 +68,33 @@ public sealed class PracticeHub(
             Context.ConnectionId,
             questionId,
             answerId,
+            Context.ConnectionAborted);
+    }
+
+    // pause() y start() del GameModule en práctica y playground (R-35): detienen y reanudan el tiempo.
+    public async Task PausePractice(
+        string matchId,
+        string secret)
+    {
+        EnsureJoined(matchId);
+
+        await sessions.PauseAsync(
+            matchId,
+            secret,
+            Context.ConnectionId,
+            Context.ConnectionAborted);
+    }
+
+    public async Task<object> ResumePractice(
+        string matchId,
+        string secret)
+    {
+        EnsureJoined(matchId);
+
+        return await sessions.ResumeAsync(
+            matchId,
+            secret,
+            Context.ConnectionId,
             Context.ConnectionAborted);
     }
 

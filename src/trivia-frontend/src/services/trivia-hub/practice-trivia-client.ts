@@ -12,6 +12,7 @@ interface PracticeAnswer { questionId: string; selectedAnswerId: string; receive
 interface PracticeFinished { matchId: string; totalScore: number; correctAnswers: number }
 interface PracticeState extends PracticeFinished {
   phase: GamePhase;
+  paused?: boolean;
   totalQuestions: number;
   currentQuestion: QuestionStartedEvent | null;
   review: QuestionClosedEvent | null;
@@ -26,6 +27,8 @@ export class PracticeTriviaClient implements TriviaHubClient {
   private lastQuestion?: QuestionStartedEvent;
   private lastAnswer?: { questionId: string; answerId: string };
   private score = 0;
+  /** El servidor confirmó la pausa y el jugador todavía no reanudó. */
+  private paused = false;
   public connectionState: HubConnectionState = 'disconnected';
 
   public constructor(url: string, private readonly player: { id: string; displayName: string }) {
@@ -80,7 +83,12 @@ export class PracticeTriviaClient implements TriviaHubClient {
       });
       return;
     }
-    const state = await this.connection.invoke<PracticeState>('ReconnectPractice', this.session.matchId, this.session.secret);
+    let state = await this.connection.invoke<PracticeState>('ReconnectPractice', this.session.matchId, this.session.secret);
+    // Si el jugador reanudó mientras estaba desconectado, el servidor sigue en pausa: se reanuda aquí.
+    if (state.paused && !this.paused) state = await this.connection.invoke<PracticeState>('ResumePractice', this.session.matchId, this.session.secret);
+    this.show(state);
+  }
+  private show(state: PracticeState): void {
     this.score = state.totalScore;
     // Durante la revisión el servidor no reenvía la pregunta: se conserva la última que se mostró.
     const question = state.currentQuestion ?? (state.review && this.lastQuestion?.questionId === state.review.questionId ? this.lastQuestion : null);
@@ -91,6 +99,18 @@ export class PracticeTriviaClient implements TriviaHubClient {
       lastQuestionResult: state.review,
     });
     if (state.phase === 'finished') this.finish(state);
+  }
+  /** Detiene el tiempo de la pregunta o de la revisión en el servidor. */
+  public async pause(): Promise<void> {
+    if (!this.session) return;
+    await this.connection.invoke('PausePractice', this.session.matchId, this.session.secret);
+    this.paused = true;
+  }
+  /** Reanuda con el tiempo que quedaba; el servidor devuelve la pregunta con su nuevo plazo. */
+  public async resume(): Promise<void> {
+    if (!this.session) return;
+    this.paused = false;
+    this.show(await this.connection.invoke<PracticeState>('ResumePractice', this.session.matchId, this.session.secret));
   }
   public async submitAnswer(request: SubmitAnswerRequest): Promise<void> {
     if (!this.session) throw new Error('La partida todavía no empezó.');

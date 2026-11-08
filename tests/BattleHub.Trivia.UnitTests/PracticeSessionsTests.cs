@@ -623,4 +623,332 @@ public sealed class PracticeSessionsTests
         }
     }
 
+    private static async Task<(string MatchId, string Secret)> StartPracticeAsync(
+        PracticeSessions sessions)
+    {
+        var (matchId, secret) =
+            await sessions.CreateAsync("Jugador", default);
+
+        await sessions.AttachConnectionAsync(
+            matchId,
+            secret,
+            "connection-1",
+            default);
+
+        await sessions.StartAsync(matchId, secret, default);
+
+        return (matchId, secret);
+    }
+
+    private static JsonElement Json(object value) =>
+        JsonSerializer.SerializeToElement(
+            value,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+    private static async Task<string?> PhaseAsync(
+        PracticeSessions sessions,
+        string matchId,
+        string secret) =>
+        Json(await sessions.GetStateAsync(matchId, secret, default))
+            .GetProperty("phase")
+            .GetString();
+
+    [Fact]
+    public async Task PausedQuestionDoesNotCloseUntilResumed()
+    {
+        var (sessions, services, clock) = CreateSessions();
+
+        using (services)
+        {
+            var (matchId, secret) = await StartPracticeAsync(sessions);
+
+            // Pausa a los 5 segundos: quedan 10.
+            clock.Advance(5);
+
+            await sessions.PauseAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            clock.Advance(60);
+            await sessions.TickAsync(default);
+
+            var paused = Json(await sessions.GetStateAsync(
+                matchId,
+                secret,
+                default));
+
+            Assert.Equal("playing", paused.GetProperty("phase").GetString());
+            Assert.True(paused.GetProperty("paused").GetBoolean());
+
+            var resumed = Json(await sessions.ResumeAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default));
+
+            Assert.False(resumed.GetProperty("paused").GetBoolean());
+
+            var expiresAt = DateTimeOffset.Parse(
+                resumed.GetProperty("currentQuestion")
+                    .GetProperty("expiresAtUtc")
+                    .GetString()!);
+
+            Assert.Equal(clock.GetUtcNow().AddSeconds(10), expiresAt);
+
+            clock.Advance(9);
+            await sessions.TickAsync(default);
+
+            Assert.Equal("playing", await PhaseAsync(sessions, matchId, secret));
+
+            clock.Advance(1);
+            await sessions.TickAsync(default);
+
+            Assert.Equal("reviewing", await PhaseAsync(sessions, matchId, secret));
+        }
+    }
+
+    [Fact]
+    public async Task ScoreAfterResumeDoesNotCountThePause()
+    {
+        var (sessions, services, clock) = CreateSessions();
+
+        using (services)
+        {
+            var (matchId, secret) = await StartPracticeAsync(sessions);
+
+            clock.Advance(3);
+
+            await sessions.PauseAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            clock.Advance(100);
+
+            await sessions.ResumeAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            var answer = Json(await sessions.AnswerAsync(
+                matchId,
+                secret,
+                "connection-1",
+                "q1",
+                "a",
+                default));
+
+            // Quedaban 12 segundos al pausar: 100 + 12 × 10.
+            Assert.Equal(220, answer.GetProperty("pointsEarned").GetInt32());
+        }
+    }
+
+    [Fact]
+    public async Task AnswerWhilePausedIsRejected()
+    {
+        var (sessions, services, _) = CreateSessions();
+
+        using (services)
+        {
+            var (matchId, secret) = await StartPracticeAsync(sessions);
+
+            await sessions.PauseAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            var exception = await Assert.ThrowsAsync<HubException>(
+                () => sessions.AnswerAsync(
+                    matchId,
+                    secret,
+                    "connection-1",
+                    "q1",
+                    "a",
+                    default));
+
+            Assert.Equal("PRACTICE_PAUSED", exception.Message);
+        }
+    }
+
+    [Fact]
+    public async Task PauseDuringReviewDelaysTheNextQuestion()
+    {
+        var (sessions, services, clock) = CreateSessions();
+
+        using (services)
+        {
+            var (matchId, secret) = await StartPracticeAsync(sessions);
+
+            clock.Advance(15);
+            await sessions.TickAsync(default);
+
+            // Pausa a los 2 segundos de los 5 de revisión: quedan 3.
+            clock.Advance(2);
+
+            await sessions.PauseAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            clock.Advance(30);
+            await sessions.TickAsync(default);
+
+            Assert.Equal("reviewing", await PhaseAsync(sessions, matchId, secret));
+
+            await sessions.ResumeAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            clock.Advance(2);
+            await sessions.TickAsync(default);
+
+            Assert.Equal("reviewing", await PhaseAsync(sessions, matchId, secret));
+
+            clock.Advance(1);
+            await sessions.TickAsync(default);
+
+            var state = Json(await sessions.GetStateAsync(
+                matchId,
+                secret,
+                default));
+
+            Assert.Equal("playing", state.GetProperty("phase").GetString());
+            Assert.Equal(2, state.GetProperty("questionNumber").GetInt32());
+        }
+    }
+
+    [Fact]
+    public async Task PauseBeforeTheFirstQuestionHasNoEffect()
+    {
+        var (sessions, services, _) = CreateSessions();
+
+        using (services)
+        {
+            var (matchId, secret) =
+                await sessions.CreateAsync("Jugador", default);
+
+            await sessions.AttachConnectionAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            await sessions.PauseAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            var state = Json(await sessions.GetStateAsync(
+                matchId,
+                secret,
+                default));
+
+            Assert.False(state.GetProperty("paused").GetBoolean());
+        }
+    }
+
+    [Fact]
+    public async Task OnlyTheActiveConnectionCanPauseOrResume()
+    {
+        var (sessions, services, _) = CreateSessions();
+
+        using (services)
+        {
+            var (matchId, secret) = await StartPracticeAsync(sessions);
+
+            var pause = await Assert.ThrowsAsync<HubException>(
+                () => sessions.PauseAsync(
+                    matchId,
+                    secret,
+                    "connection-intruder",
+                    default));
+
+            var resume = await Assert.ThrowsAsync<HubException>(
+                () => sessions.ResumeAsync(
+                    matchId,
+                    secret,
+                    "connection-intruder",
+                    default));
+
+            Assert.Equal("PRACTICE_NOT_CONNECTED", pause.Message);
+            Assert.Equal("PRACTICE_NOT_CONNECTED", resume.Message);
+        }
+    }
+
+    [Fact]
+    public async Task AbandonedPauseIsRemovedAfterThirtyMinutes()
+    {
+        var (sessions, services, clock) = CreateSessions();
+
+        using (services)
+        {
+            var (matchId, secret) = await StartPracticeAsync(sessions);
+
+            await sessions.PauseAsync(
+                matchId,
+                secret,
+                "connection-1",
+                default);
+
+            clock.Advance(29 * 60);
+            await sessions.CleanupExpiredAsync(default);
+
+            Assert.Equal("playing", await PhaseAsync(sessions, matchId, secret));
+
+            clock.Advance(60);
+            await sessions.CleanupExpiredAsync(default);
+
+            var exception = await Assert.ThrowsAsync<HubException>(
+                () => sessions.GetStateAsync(matchId, secret, default));
+
+            Assert.Equal("PRACTICE_NOT_FOUND", exception.Message);
+        }
+    }
+
+    [Fact]
+    public async Task HubPausesAndResumesOnlyTheJoinedPractice()
+    {
+        var (sessions, services, _) = CreateSessions();
+
+        using (services)
+        {
+            var context = Substitute.For<HubCallerContext>();
+
+            context.Items.Returns(new Dictionary<object, object?>());
+            context.ConnectionId.Returns("connection-1");
+
+            var hub = new PracticeHub(sessions) { Context = context };
+
+            var started = Json(await hub.StartPractice("Jugador"));
+            var matchId = started.GetProperty("matchId").GetString()!;
+            var secret = started.GetProperty("secret").GetString()!;
+
+            await hub.PausePractice(matchId, secret);
+
+            var paused = Json(await sessions.GetStateAsync(
+                matchId,
+                secret,
+                default));
+
+            Assert.True(paused.GetProperty("paused").GetBoolean());
+
+            var resumed = Json(await hub.ResumePractice(matchId, secret));
+
+            Assert.False(resumed.GetProperty("paused").GetBoolean());
+
+            var exception = await Assert.ThrowsAsync<HubException>(
+                () => hub.PausePractice("practice-otra", secret));
+
+            Assert.Equal("PRACTICE_NOT_JOINED", exception.Message);
+        }
+    }
 }
