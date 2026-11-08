@@ -31,6 +31,8 @@ export class GameModule implements IGameModule {
   public mode: GameMode = 'match';
   /** Partida de un solo jugador en curso (práctica o playground): no se guarda en el historial. */
   public solo = false;
+  /** En pausa, el servidor detuvo el tiempo (solo en práctica y playground): el contador se congela. */
+  public timeStopped = false;
   public connecting = false;
   public loadingHistory = false;
   public history: HistoryItem[] = [];
@@ -55,6 +57,11 @@ export class GameModule implements IGameModule {
     this.state = 'initialized';
   }
   public get soloTitle(): string { return this.mode === 'practice' ? 'Modo práctica' : 'Modo playground'; }
+  public get pauseNotice(): string {
+    return this.timeStopped
+      ? 'Partida en pausa: el tiempo está detenido. Reanuda para seguir jugando.'
+      : `La vista está pausada. ${this.solo ? 'La partida' : 'La partida compartida'} continúa en el servidor.`;
+  }
   /** Sala de la partida. Sin sala queda vacío: el cliente de práctica no lo usa. */
   private get matchId(): string { return this.context?.matchId ?? ''; }
   private live(): boolean { return this.state !== 'disposed'; }
@@ -111,13 +118,14 @@ export class GameModule implements IGameModule {
     this.players = this.players.map(player => player.userId === id ? { ...player, isConnected: connected } : player);
   }
   private tick(): void {
+    if (this.state === 'paused' && this.timeStopped) return;
     if (this.question && this.phase === 'playing') this.seconds = Math.ceil(this.clock.countdown(this.question.expiresAtUtc).remainingMs / 1000);
   }
   public async start(): Promise<void> {
     if (!this.live()) throw new Error('El juego ya fue liberado con dispose()');
     if (!this.context) throw new Error('Falta llamar a initialize()');
     if (this.connecting) return;
-    if (this.client) { this.state = 'running'; return; }
+    if (this.client) { await this.resume(); return; }
     if (this.mode === 'match') { await this.connect(new SignalRTriviaClient(apiUrl)); return; }
     this.state = 'running';
     if (this.mode === 'practice') await this.playSolo();
@@ -128,7 +136,7 @@ export class GameModule implements IGameModule {
     await this.leave();
     this.phase = 'waiting'; this.players = []; this.question = null; this.review = null; this.result = null;
     this.selectedAnswerId = null; this.answered = false; this.submitting = false; this.seconds = 0; this.error = '';
-    this.connection = 'disconnected'; this.solo = true;
+    this.connection = 'disconnected'; this.solo = true; this.timeStopped = false;
     try { await this.connect(new PracticeTriviaClient(apiUrl, this.context.currentUser)); }
     catch (error) {
       if (!this.live()) return;
@@ -178,7 +186,29 @@ export class GameModule implements IGameModule {
     } catch { if (this.live()) this.error = 'No se pudo cargar tu historial. Revisa la API y reintenta.'; }
     finally { this.loadingHistory = false; }
   }
-  public async pause(): Promise<void> { if (this.state === 'running') this.state = 'paused'; }
+  // R-35: pause() detiene el juego y start() lo reanuda. Sin sala, el servidor detiene el tiempo; una sala es
+  // compartida y sigue para los demás, como cuando alguien se desconecta. Un fallo no se lanza: el Shell
+  // descargaría el juego con LIFECYCLE_ERROR.
+  public async pause(): Promise<void> {
+    if (this.state !== 'running') return;
+    this.state = 'paused';
+    if (!this.solo || !this.client?.pause || (this.phase !== 'playing' && this.phase !== 'reviewing')) return;
+    try {
+      await this.client.pause();
+      // Si start() llegó mientras se pausaba, el servidor no debe quedar detenido.
+      if (this.state === 'paused') this.timeStopped = true; else await this.client?.resume?.();
+    } catch { if (this.live()) this.error = 'No se pudo detener el tiempo: la partida sigue en el servidor.'; }
+  }
+  private async resume(): Promise<void> {
+    if (this.timeStopped) {
+      this.timeStopped = false;
+      try { await this.client!.resume?.(); }
+      catch { if (this.live()) this.error = 'No se pudo reanudar la partida. Revisa tu conexión.'; }
+    }
+    if (!this.live()) return;
+    this.state = 'running';
+    this.tick();
+  }
   public myScore(item: HistoryItem): number { return item.players.find(player => player.userId === this.context?.currentUser.id)?.score ?? 0; }
   public async dispose(): Promise<void> {
     this.state = 'disposed'; this.abort.abort(); clearInterval(this.timer);

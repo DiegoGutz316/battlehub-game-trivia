@@ -30,6 +30,9 @@ public sealed class PracticeSessions(
 
         public DateTimeOffset? FinishedAt { get; set; }
 
+        // Con la partida en pausa, el plazo de la pregunta o de la revisión no avanza.
+        public DateTimeOffset? PausedAt { get; set; }
+
         public SemaphoreSlim Gate { get; } = new(1, 1);
 
         public string Phase { get; set; } = "waiting";
@@ -210,6 +213,11 @@ public sealed class PracticeSessions(
                 throw new HubException("PRACTICE_NOT_CONNECTED");
             }
 
+            if (session.PausedAt is not null)
+            {
+                throw new HubException("PRACTICE_PAUSED");
+            }
+
             var now = clock.GetUtcNow();
             var question = session.Match.CurrentQuestion;
 
@@ -255,6 +263,82 @@ public sealed class PracticeSessions(
                 totalScore = player.Score,
                 receivedAtUtc = now.UtcDateTime.ToString("O")
             };
+        }
+        finally
+        {
+            session.Gate.Release();
+        }
+    }
+
+    // pause() del GameModule (R-35): congela el plazo de la pregunta o de la revisión.
+    // Solo existe en las partidas de un solo jugador; la de una sala es compartida y no se pausa.
+    public async Task PauseAsync(
+        string matchId,
+        string secret,
+        string connectionId,
+        CancellationToken ct)
+    {
+        var session = GetAuthorizedSession(matchId, secret);
+
+        await session.Gate.WaitAsync(ct);
+
+        try
+        {
+            if (session.ConnectionId != connectionId)
+            {
+                throw new HubException("PRACTICE_NOT_CONNECTED");
+            }
+
+            if (session.PausedAt is null &&
+                session.Phase is "playing" or "reviewing")
+            {
+                session.PausedAt = clock.GetUtcNow();
+                session.Updated = session.PausedAt.Value;
+            }
+        }
+        finally
+        {
+            session.Gate.Release();
+        }
+    }
+
+    // Reanuda con el tiempo que quedaba: el plazo y el inicio de la pregunta se corren lo que
+    // duró la pausa, así el puntaje no cuenta ese tiempo.
+    public async Task<object> ResumeAsync(
+        string matchId,
+        string secret,
+        string connectionId,
+        CancellationToken ct)
+    {
+        var session = GetAuthorizedSession(matchId, secret);
+
+        await session.Gate.WaitAsync(ct);
+
+        try
+        {
+            if (session.ConnectionId != connectionId)
+            {
+                throw new HubException("PRACTICE_NOT_CONNECTED");
+            }
+
+            var now = clock.GetUtcNow();
+
+            if (session.PausedAt is not null)
+            {
+                var paused = now - session.PausedAt.Value;
+
+                session.Due += paused;
+
+                if (session.Match.QuestionStartedAt is not null)
+                {
+                    session.Match.QuestionStartedAt += paused;
+                }
+
+                session.PausedAt = null;
+                session.Updated = now;
+            }
+
+            return BuildState(session, now);
         }
         finally
         {
@@ -336,7 +420,7 @@ public sealed class PracticeSessions(
             {
                 var now = clock.GetUtcNow();
 
-                if (now < session.Due)
+                if (session.PausedAt is not null || now < session.Due)
                 {
                     continue;
                 }
@@ -471,43 +555,50 @@ public sealed class PracticeSessions(
 
         try
         {
-            var now = clock.GetUtcNow();
-            var match = session.Match;
-            var player = match.Players.Single();
-
-            object? currentQuestion = null;
-            object? review = null;
-
-            if (session.Phase == "playing")
-            {
-                currentQuestion = BuildQuestionStarted(
-                    session,
-                    now);
-            }
-            else if (session.Phase == "reviewing")
-            {
-                review = BuildQuestionReview(
-                    session,
-                    now);
-            }
-
-            return new
-            {
-                match.MatchId,
-                phase = session.Phase,
-                questionNumber = match.CurrentQuestionIndex + 1,
-                totalQuestions = match.Questions.Count,
-                totalScore = player.Score,
-                correctAnswers = player.CorrectAnswers,
-                currentQuestion,
-                review,
-                serverTimeUtc = now.UtcDateTime.ToString("O")
-            };
+            return BuildState(session, clock.GetUtcNow());
         }
         finally
         {
             session.Gate.Release();
         }
+    }
+
+    private static object BuildState(
+        Session session,
+        DateTimeOffset now)
+    {
+        var match = session.Match;
+        var player = match.Players.Single();
+
+        object? currentQuestion = null;
+        object? review = null;
+
+        if (session.Phase == "playing")
+        {
+            currentQuestion = BuildQuestionStarted(
+                session,
+                now);
+        }
+        else if (session.Phase == "reviewing")
+        {
+            review = BuildQuestionReview(
+                session,
+                now);
+        }
+
+        return new
+        {
+            match.MatchId,
+            phase = session.Phase,
+            paused = session.PausedAt is not null,
+            questionNumber = match.CurrentQuestionIndex + 1,
+            totalQuestions = match.Questions.Count,
+            totalScore = player.Score,
+            correctAnswers = player.CorrectAnswers,
+            currentQuestion,
+            review,
+            serverTimeUtc = now.UtcDateTime.ToString("O")
+        };
     }
 
     public async Task CleanupExpiredAsync(CancellationToken ct)
@@ -532,7 +623,13 @@ public sealed class PracticeSessions(
                     now - session.FinishedAt.Value >=
                         TimeSpan.FromMinutes(10);
 
-                if (disconnectedTooLong || finishedTooLong)
+                // Una pausa que nadie reanuda no debe ocupar un lugar para siempre.
+                var pausedTooLong =
+                    session.PausedAt is not null &&
+                    now - session.PausedAt.Value >=
+                        TimeSpan.FromMinutes(30);
+
+                if (disconnectedTooLong || finishedTooLong || pausedTooLong)
                 {
                     sessions.TryRemove(
                         new KeyValuePair<string, Session>(

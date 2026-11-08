@@ -68,6 +68,8 @@ La práctica no se guarda en el historial y no emite `battlehub:game-finished`, 
 
 `practice` y `playground` usan el hub `/hubs/trivia/practice`, de un solo jugador, y las mismas pantallas que una partida.
 
+En esos dos modos, `pause()` detiene el tiempo en el servidor (`PausePractice`) y `start()` lo reanuda con el tiempo que quedaba (`ResumePractice`). En una partida con sala, `pause()` solo pausa la vista: la partida es compartida y sigue para los demás. Ninguno de los dos lanza un error si el servidor falla; el juego muestra el aviso, para que el Shell no lo descargue con `LIFECYCLE_ERROR`.
+
 ## Cómo funciona una partida
 
 1. Cada jugador se conecta a `/hubs/trivia` y llama a `JoinMatch` con `matchId`, su `userId` y `participants`.
